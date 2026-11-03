@@ -5,11 +5,15 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
+#include "TeamTypes.h"
 #include "RedVsBlueCharacter.generated.h"
 
+class UStaticMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UInputMappingContext;
+class AFlag;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -33,6 +37,12 @@ class ARedVsBlueCharacter : public ACharacter
 	
 protected:
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputMappingContext> DefaultMappingContext;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputMappingContext> MouseMoveMappingContext;
+
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* JumpAction;
@@ -53,11 +63,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* InteractAction;
 
-	UPROPERTY(EditAnywhere)
-	bool IsCarrying;
-
-	UPROPERTY(EditAnywhere)
-	FString TeamName;
+	UPROPERTY(ReplicatedUsing = OnRep_CarriedFlag,EditAnywhere,BlueprintReadWrite, Category = "Flag")
+	TObjectPtr<AFlag> CarriedFlag = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Flag")
 	UStaticMeshComponent* FlagMesh;
@@ -67,8 +74,6 @@ public:
 	/** Constructor */
 	ARedVsBlueCharacter();	
 
-	void InteractOtherActor();
-
 protected:
 
 	/** Initialize input action bindings */
@@ -76,6 +81,8 @@ protected:
 
 	virtual void NotifyActorBeginOverlap(AActor* OtherActor) override;
 	virtual void NotifyActorEndOverlap(AActor* OtherActor) override;
+
+	virtual void PawnClientRestart() override;
 
 protected:
 
@@ -103,11 +110,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
-	UFUNCTION(BlueprintCallable, Category= "Getter")
+	UFUNCTION(BlueprintCallable, Category = "Getter")
 	bool GetIsCarrying();
 
-	UFUNCTION(BlueprintCallable, Category = "Setter")
-	void SetIsCarrying(bool NewIsCarrying);
+	UFUNCTION(BlueprintCallable, Category= "Flag")
+	AFlag* GetCarriedFlag() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Flag")
+	void SetCarriedFlag(AFlag* NewFlag);
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UFUNCTION(Server, Reliable)
+	void Server_Interact(AActor* TargetActor);
+
+	UFUNCTION(BlueprintCallable, Category = "Team")
+	ETeam GetTeam() const;
+
+	UFUNCTION()
+	void OnRep_CarriedFlag();
+
+	void InteractOtherActor();
 
 public:
 

@@ -1,17 +1,23 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "RedVsBlueCharacter.h"
-#include "InteractInterface.h"
-#include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/LocalPlayer.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Flag.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
+#include "GameFramework/PlayerController.h"
+#include "InteractInterface.h"
+#include "InputMappingContext.h"
 #include "InputActionValue.h"
+#include "Net/UnrealNetwork.h"
 #include "RedVsBlue.h"
+#include "RedVsBluePlayerState.h"
 
 ARedVsBlueCharacter::ARedVsBlueCharacter()
 {
@@ -22,10 +28,6 @@ ARedVsBlueCharacter::ARedVsBlueCharacter()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
-
-	TeamName = "Blue";
-	
-
 
 	// Configure character movement
 	GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -51,6 +53,12 @@ ARedVsBlueCharacter::ARedVsBlueCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	bReplicates = true;
+
+	FlagMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CarriedFlagMesh"));
+	FlagMesh->SetupAttachment(GetMesh(), TEXT("FlagSocket"));
+	FlagMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FlagMesh->SetVisibility(false);
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -99,6 +107,47 @@ void ARedVsBlueCharacter::Look(const FInputActionValue& Value)
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
 }
 
+ETeam ARedVsBlueCharacter::GetTeam() const
+{
+	const ARedVsBluePlayerState* RBPlayerState = GetPlayerState<ARedVsBluePlayerState>();
+
+	if (!IsValid(RBPlayerState))
+    {
+        return ETeam::None;
+    }
+
+	return RBPlayerState->GetTeam();
+}
+
+void ARedVsBlueCharacter::OnRep_CarriedFlag()
+{
+	if (!IsValid(FlagMesh))
+	{
+		return;
+	}
+
+	if (!IsValid(CarriedFlag))
+	{
+		FlagMesh->SetVisibility(false);
+		FlagMesh->SetStaticMesh(nullptr);
+		return;
+	}
+	if (!IsValid(CarriedFlag->FlagMesh))
+	{
+		return;
+	}
+	UStaticMeshComponent* SourceMesh = CarriedFlag->FlagMesh;
+
+	FlagMesh->SetStaticMesh(SourceMesh->GetStaticMesh());
+
+	for (int32 Index = 0; Index < SourceMesh->GetNumMaterials();Index++)
+	{
+		FlagMesh->SetMaterial(Index, SourceMesh->GetMaterial(Index));
+	}
+
+	FlagMesh->SetVisibility(true);
+}
+
 void ARedVsBlueCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController() != nullptr)
@@ -143,12 +192,56 @@ void ARedVsBlueCharacter::DoJumpEnd()
 
 bool ARedVsBlueCharacter::GetIsCarrying()
 {
-	return IsCarrying;
+	return IsValid(CarriedFlag);
 }
 
-void ARedVsBlueCharacter::SetIsCarrying(bool NewIsCarrying)
+AFlag* ARedVsBlueCharacter::GetCarriedFlag() const
 {
-	IsCarrying = NewIsCarrying;
+	return CarriedFlag.Get();
+}
+
+void ARedVsBlueCharacter::SetCarriedFlag(AFlag* NewFlag)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	CarriedFlag = NewFlag;
+
+	OnRep_CarriedFlag();
+	ForceNetUpdate();
+}
+
+void ARedVsBlueCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ARedVsBlueCharacter, CarriedFlag);
+}
+
+void ARedVsBlueCharacter::Server_Interact_Implementation(AActor* TargetActor)
+{
+	if (!IsValid(TargetActor) || !TargetActor->Implements<UInteractInterface>()) 
+	{
+		return;
+	}
+	const float Distance = FVector::Dist(GetActorLocation(), TargetActor->GetActorLocation());
+
+	if (Distance > 250.f)
+	{
+		return;
+	}
+
+	const ETeam CurrentTeam = GetTeam();
+
+	if (CurrentTeam == ETeam::None) 
+	{
+		return;
+	}
+
+	const FString TeamString = CurrentTeam == ETeam::Blue ? TEXT("Blue") : TEXT("Red");
+
+	IInteractInterface::Execute_Interact(TargetActor, this, TeamString, GetIsCarrying());
 }
 
 void ARedVsBlueCharacter::NotifyActorBeginOverlap(AActor* OtherActor)
@@ -158,19 +251,51 @@ void ARedVsBlueCharacter::NotifyActorBeginOverlap(AActor* OtherActor)
 
 void ARedVsBlueCharacter::NotifyActorEndOverlap(AActor* OtherActor)
 {
-	OverlapActor = nullptr;
+	if (OverlapActor == OtherActor) 
+	{
+		OverlapActor = nullptr;
+	}
+}
+
+void ARedVsBlueCharacter::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+
+	if (!IsValid(PC) || !PC->IsLocalController())
+	{
+		return;
+	}
+
+	ULocalPlayer* LocalPlayer = PC->GetLocalPlayer();
+
+	if (!IsValid(LocalPlayer))
+	{
+		return;
+	}
+
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer);
+
+	if (IsValid(Subsystem))
+	{
+		if (IsValid(DefaultMappingContext))
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+		if (IsValid(MouseMoveMappingContext))
+		{
+			Subsystem->AddMappingContext(MouseMoveMappingContext, 1);
+		}
+
+	}
 }
 
 
 void ARedVsBlueCharacter::InteractOtherActor()
 {
-	if (OverlapActor && OverlapActor->Implements<UInteractInterface>())
+	if (IsValid(OverlapActor) && OverlapActor->Implements<UInteractInterface>())
 	{
-		IInteractInterface::Execute_Interact(
-			OverlapActor,
-			this,
-			TeamName,
-			IsCarrying
-		);
+		Server_Interact(OverlapActor.Get());
 	}
 }

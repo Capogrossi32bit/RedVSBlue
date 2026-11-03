@@ -2,6 +2,7 @@
 
 
 #include "Flag.h"
+#include "Net/UnrealNetwork.h"
 #include "../RedVsBlueCharacter.h"
 #include "Components/SphereComponent.h"
 
@@ -31,81 +32,73 @@ AFlag::AFlag()
 void AFlag::BeginPlay()
 {
 	Super::BeginPlay();
+    FlagMesh->SetVisibility(!IsTaken);
 	
 }
 
 // Called every frame
 void AFlag::Tick(float DeltaTime)
 {
-	Super::Tick(DeltaTime);
+    Super::Tick(DeltaTime);
 
 }
 
-void AFlag::Interact_Implementation(
-    AActor* Interactor,
-    const FString& InteractorTeam,
-    bool InteractorHasFlag
-)
+void AFlag::OnRep_IsTaken()
 {
-    GEngine->AddOnScreenDebugMessage(
-        -1,
-        5.f,
-        FColor::Red,
-        Team
-    );
+    FlagMesh->SetVisibility(!IsTaken);
+}
 
-    GEngine->AddOnScreenDebugMessage(
-        -1,
-        5.f,
-        FColor::Green,
-        InteractorTeam
-    );
+void AFlag::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(AFlag, IsTaken);
+}
 
-    // Q = Tiene la bandera, P = Mismo equipo que el color de la bandera
-    /*
-    P|&|Q
-    V|V|V
-    V|F|F
-    F|F|V
-    F|F|F
-    */
-
-    if (InteractorTeam == Team && InteractorHasFlag && !IsTaken)
+void AFlag::Interact_Implementation(AActor* Interactor, const FString& InteractorTeam,bool InteractorHasFlag)
+{
+    if (!HasAuthority())
     {
-        GEngine->AddOnScreenDebugMessage(
-            -1,
-            5.f,
-            FColor::Green,
-            TEXT("Scored point")
-        );
-
+        return;
     }
 
-    if (InteractorTeam == Team && !InteractorHasFlag && !IsTaken)
+    ARedVsBlueCharacter* InteractingCharacter = Cast<ARedVsBlueCharacter>(Interactor);
+
+    if (!IsValid(InteractingCharacter))
     {
-        GEngine->AddOnScreenDebugMessage(
-            -1,
-            5.f,
-            FColor::Green,
-            TEXT("No Flag")
-        );
+        return;
     }
 
-    if (InteractorTeam != Team && InteractorHasFlag && !IsTaken)
+    const ETeam CharacterTeam = InteractingCharacter->GetTeam();
+
+    if (CharacterTeam == ETeam::None)
     {
-        GEngine->AddOnScreenDebugMessage(
-            -1,
-            5.f,
-            FColor::Green,
-            TEXT("Already Carrying")
-        );
+        return;
     }
-    if (InteractorTeam != Team && !InteractorHasFlag && !IsTaken)
+
+    const FString CharacterTeamName = CharacterTeam == ETeam::Blue ? TEXT("Blue") : TEXT("Red");
+
+    //La bandera es del mismo equipo
+    if (CharacterTeamName == Team)
     {
-        Character = Cast<ARedVsBlueCharacter>(Interactor);
-        Character->SetIsCarrying(true);
-        IsTaken = true;
-        FlagMesh->SetVisibility(false);
+        return;
     }
+
+    //La bandera ya fue tomada
+    if (IsTaken)
+    {
+        return;
+    }
+
+    //Ya transporta una bandera
+    if (InteractingCharacter->GetIsCarrying())
+    {
+        return;
+    }
+
+    InteractingCharacter->SetCarriedFlag(this);
+    IsTaken = true;
+
+    OnRep_IsTaken();
+    ForceNetUpdate();
 }
 

@@ -30,8 +30,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TObjectPtr<UStaticMeshComponent> FlagMesh;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool IsTaken;
+	UPROPERTY(ReplicatedUsing = OnRep_IsTaken,EditAnywhere, BlueprintReadWrite)
+	bool IsTaken = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString Team;
@@ -40,6 +40,10 @@ public:
 	TObjectPtr<ARedVsBlueCharacter> Character;
 
 	// Functions
+	UFUNCTION()
+	void OnRep_IsTaken();
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
