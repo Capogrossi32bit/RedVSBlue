@@ -17,6 +17,7 @@
 #include "InputActionValue.h"
 #include "Net/UnrealNetwork.h"
 #include "RedVsBlue.h"
+#include "RedVsBlueGameState.h"
 #include "RedVsBluePlayerState.h"
 
 ARedVsBlueCharacter::ARedVsBlueCharacter()
@@ -82,6 +83,7 @@ void ARedVsBlueCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 		// Interact
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &ARedVsBlueCharacter::InteractOtherActor);
+		EnhancedInputComponent->BindAction(DropFlagAction, ETriggerEvent::Started, this, &ARedVsBlueCharacter::DropCarriedFlag);
 	}
 	else
 	{
@@ -211,6 +213,27 @@ void ARedVsBlueCharacter::SetCarriedFlag(AFlag* NewFlag)
 
 	OnRep_CarriedFlag();
 	ForceNetUpdate();
+}
+
+void ARedVsBlueCharacter::DropCarriedFlag()
+{
+	Server_DropFlag();
+}
+
+void ARedVsBlueCharacter::Server_DropFlag_Implementation()
+{
+	ARedVsBlueGameState* RBGameState = GetWorld()->GetGameState<ARedVsBlueGameState>();
+
+	if (!IsValid(RBGameState) || RBGameState->GetMatchPhase() != EMatchPhase::Playing)
+	{
+		return;
+	}
+
+	if (!IsValid(CarriedFlag))
+	{
+		return;
+	}
+	CarriedFlag->DropFlag(this);
 }
 
 void ARedVsBlueCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

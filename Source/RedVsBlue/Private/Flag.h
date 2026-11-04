@@ -3,6 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "TeamTypes.h"
+#include "FlagState.h"
 #include "GameFramework/Actor.h"
 #include "InteractInterface.h"
 #include "Flag.generated.h"
@@ -30,8 +32,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TObjectPtr<UStaticMeshComponent> FlagMesh;
 
-	UPROPERTY(ReplicatedUsing = OnRep_IsTaken,EditAnywhere, BlueprintReadWrite)
-	bool IsTaken = false;
+	UPROPERTY(ReplicatedUsing = OnRep_FlagState, VisibleAnywhere,BlueprintReadOnly,Category="Flag")
+	EFlagState FlagState = EFlagState::AtBase;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString Team;
@@ -41,7 +43,16 @@ public:
 
 	// Functions
 	UFUNCTION()
-	void OnRep_IsTaken();
+	void OnRep_FlagState();
+
+	UFUNCTION()
+	void DropFlag(ARedVsBlueCharacter* RequestingCharacter);
+
+	UFUNCTION()
+	void ReturnToBase();
+
+	UFUNCTION(BlueprintCallable, Category = "Flag")
+	EFlagState GetFlagState() const;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -55,5 +66,8 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;	
 	
+	FTransform InitialTransform;
+
+	void SetFlagState(EFlagState NewState);
 
 };

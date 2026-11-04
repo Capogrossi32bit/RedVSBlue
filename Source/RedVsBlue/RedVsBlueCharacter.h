@@ -63,6 +63,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* InteractAction;
 
+	/** Drop Flag Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* DropFlagAction;
+
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedFlag,EditAnywhere,BlueprintReadWrite, Category = "Flag")
 	TObjectPtr<AFlag> CarriedFlag = nullptr;
 
@@ -118,6 +122,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Flag")
 	void SetCarriedFlag(AFlag* NewFlag);
+
+	UFUNCTION()
+	void DropCarriedFlag();
+
+	UFUNCTION(Server,Reliable)
+	void Server_DropFlag();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
