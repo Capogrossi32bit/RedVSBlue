@@ -6,6 +6,9 @@
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
 #include "Blueprint/UserWidget.h"
+#include "RedVsBlueHUDWidget.h"
+#include "Blueprint/UserWidget.h"
+#include "TimerManager.h"
 #include "RedVsBlue.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 
@@ -30,6 +33,39 @@ void ARedVsBluePlayerController::BeginPlay()
 
 		}
 
+	}
+
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (!HUDWidgetClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("HUDWidgetClass is not assigned"));
+		return;
+	}
+
+	HUDWidget = CreateWidget<URedVsBlueHUDWidget>(this, HUDWidgetClass);
+
+	if (!IsValid(HUDWidget))
+	{
+		return;
+	}
+
+	HUDWidget->AddToViewport();
+
+	RefreshHUD();
+
+	GetWorldTimerManager().SetTimer(HUDRefreshTimer, this, &ARedVsBluePlayerController::RefreshHUD, 0.25f, true);
+
+}
+
+void ARedVsBluePlayerController::RefreshHUD()
+{
+	if (IsValid(HUDWidget))
+	{
+		HUDWidget->RefreshHUD();
 	}
 }
 
