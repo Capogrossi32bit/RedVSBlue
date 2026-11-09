@@ -2,21 +2,52 @@
 
 
 #include "RedVsBlueGameModeBase.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Flag.h"
+#include "FlagState.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/GameStateBase.h"
+#include "MatchPhase.h"
+#include "RedVsBlueGameState.h"
 #include "RedVsBluePlayerState.h"
 #include "RedVsBlueCharacter.h"
-#include "GameFramework/GameStateBase.h"
 #include "RedVsBlueGameState.h"
-#include "Flag.h"
-#include "MatchPhase.h"
-#include "FlagState.h"
+#include "TeamPlayerStart.h"
 #include "TimerManager.h"
-#include "Engine/World.h"
 
 ARedVsBlueGameModeBase::ARedVsBlueGameModeBase()
 {
 	PlayerStateClass = ARedVsBluePlayerState::StaticClass();
 
 	GameStateClass = ARedVsBlueGameState::StaticClass();
+}
+
+void ARedVsBlueGameModeBase::RespawnPlayer(TWeakObjectPtr<APlayerController> PlayerController)
+{
+
+	if (!HasAuthority() || !PlayerController.IsValid())
+	{
+		return;
+	}
+
+	APlayerController* PC = PlayerController.Get();
+	ARedVsBlueGameState* RBGameState = GetGameState<ARedVsBlueGameState>();
+
+	if (!IsValid(RBGameState) || RBGameState->GetMatchPhase() != EMatchPhase::Playing)
+	{
+		return;
+	}
+
+	if (IsValid(PC->GetPawn()))
+	{
+		return;
+	}
+
+	RestartPlayer(PC);
+
+	UE_LOG(LogTemp, Warning, TEXT("RESPAWN | Controller: %s | NewPawn: %s"), *GetNameSafe(PC), *GetNameSafe(PC->GetPawn()));
 }
 
 void ARedVsBlueGameModeBase::BeginPlay()
@@ -56,6 +87,73 @@ void ARedVsBlueGameModeBase::StartWaitingPhase()
 
 	GetWorldTimerManager().SetTimer(MatchTimerHandle, this, &ARedVsBlueGameModeBase::UpdateMatchTimer, 1.0f, true);
 
+}
+
+AActor* ARedVsBlueGameModeBase::ChoosePlayerStart_Implementation(AController* Player)
+{
+	if (!IsValid(Player))
+	{
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	ARedVsBluePlayerState* RBPlayerState = Player->GetPlayerState<ARedVsBluePlayerState>();
+
+	if (!IsValid(RBPlayerState))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SPAWN | PlayerState not found"));
+
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+	const ETeam PlayerTeam = RBPlayerState->GetTeam();
+
+	if (PlayerTeam == ETeam::None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SPAWN | Player has no team"));
+		return Super::ChoosePlayerStart_Implementation(Player);
+
+	}
+
+	TArray<ATeamPlayerStart*> AvailableStarts;
+
+	for (TActorIterator<ATeamPlayerStart> It(GetWorld()); It; ++It)
+	{
+		ATeamPlayerStart* Start = *It;
+
+		if (IsValid(Start) && Start->Team == PlayerTeam)
+		{
+			AvailableStarts.Add(Start);
+		}
+	}
+
+	if (AvailableStarts.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SPAWN | No TeamPlayerStart found for team %d"), static_cast<int32>(PlayerTeam));
+
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	const int32 RandomIndex = FMath::RandRange(0, AvailableStarts.Num() - 1);
+
+	ATeamPlayerStart* SelectedStart = AvailableStarts[RandomIndex];
+
+	UE_LOG(LogTemp, Warning, TEXT("SPAWN | Player: %s | Team: %d | Start: %s"), *RBPlayerState->GetPlayerName(), static_cast<int32>(PlayerTeam), *GetNameSafe(SelectedStart));
+
+	return SelectedStart;
+}
+
+AActor* ARedVsBlueGameModeBase::FindPlayerStart_Implementation(AController* Player, const FString& IncomingName)
+{
+	if (!IsValid(Player))
+	{
+		return Super::FindPlayerStart_Implementation(Player,IncomingName);
+	}
+	
+	if (!IncomingName.IsEmpty())
+	{
+		return Super::FindPlayerStart_Implementation(Player, IncomingName);
+	}
+
+	return ChoosePlayerStart_Implementation(Player);
 }
 
 void ARedVsBlueGameModeBase::StartPlayingPhase()
@@ -287,4 +385,53 @@ bool ARedVsBlueGameModeBase::TryCaptureFlag(ARedVsBlueCharacter* ScoringCharacte
 
 	UE_LOG(LogTemp, Warning, TEXT("CAPTURE SUCCESS | Team: %s | Blue: %d | Red: %d"), *TeamName, RBGameState->GetBlueScore(), RBGameState->GetRedScore());
 	return true;
+}
+
+void ARedVsBlueGameModeBase::HandlePlayerDeath(ARedVsBlueCharacter* DeadCharacter)
+{
+	if (!HasAuthority()||!IsValid(DeadCharacter))
+	{
+		return;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(DeadCharacter->GetController());
+
+	if (!IsValid(PC))
+	{
+		return;
+	}
+
+	ARedVsBlueGameState* RBGameState = GetGameState<ARedVsBlueGameState>();
+
+	if (!IsValid(RBGameState))
+	{
+		return;
+	}
+
+	//Guardamos referencia al controller
+	TWeakObjectPtr<APlayerController> WeakPC = PC;
+
+	//Desvinculamos la posesion del controller y el pawn
+	PC->UnPossess();
+
+	//Eliminamos el actor
+	DeadCharacter->Destroy();
+
+	//Si no estamos en fase de juego no hacemos nada
+	if (RBGameState->GetMatchPhase() != EMatchPhase::Playing)
+	{
+		return;
+	}
+
+	//Encargado del conteo para respawnear
+	FTimerDelegate RespawnDelegate;
+
+	RespawnDelegate.BindUObject(this, &ARedVsBlueGameModeBase::RespawnPlayer, WeakPC);
+
+	FTimerHandle RespawnTimerHandle;
+
+	GetWorldTimerManager().SetTimer(RespawnTimerHandle, RespawnDelegate, RespawnDelay, false);
+
+	UE_LOG(LogTemp, Warning, TEXT("Player eliminated. Respawn in %.1f seconds"), RespawnDelay);
+
 }

@@ -4,7 +4,9 @@
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Flag.h"
@@ -12,12 +14,15 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/PlayerController.h"
+#include "HealthComponent.h"
 #include "InteractInterface.h"
 #include "InputMappingContext.h"
 #include "InputActionValue.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "RedVsBlue.h"
 #include "RedVsBlueGameState.h"
+#include "../Public/RedVsBlueGameModeBase.h"
 #include "RedVsBluePlayerState.h"
 
 ARedVsBlueCharacter::ARedVsBlueCharacter()
@@ -60,10 +65,26 @@ ARedVsBlueCharacter::ARedVsBlueCharacter()
 	FlagMesh->SetupAttachment(GetMesh(), TEXT("FlagSocket"));
 	FlagMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FlagMesh->SetVisibility(false);
+
+	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
+
+	CurrentAmmo = MaxAmmo;
+	LastFireTime = -1000.f;
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
 
+
+void ARedVsBlueCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (HasAuthority() && IsValid(HealthComponent))
+	{
+		CurrentAmmo = MaxAmmo;
+		HealthComponent->OnDeath.AddDynamic(this, &ARedVsBlueCharacter::HandleCharacterDeath);
+	}
+}
 
 void ARedVsBlueCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -81,9 +102,14 @@ void ARedVsBlueCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ARedVsBlueCharacter::Look);
 
-		// Interact
+		// Interacting
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &ARedVsBlueCharacter::InteractOtherActor);
+
+		//Drop Flag (Testing)
 		EnhancedInputComponent->BindAction(DropFlagAction, ETriggerEvent::Started, this, &ARedVsBlueCharacter::DropCarriedFlag);
+
+		// Shooting
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ARedVsBlueCharacter::Fire);
 	}
 	else
 	{
@@ -192,6 +218,122 @@ void ARedVsBlueCharacter::DoJumpEnd()
 	StopJumping();
 }
 
+void ARedVsBlueCharacter::Fire()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+	Server_Fire();
+}
+
+void ARedVsBlueCharacter::Client_HitConfirmed_Implementation()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Hit Confirmed!"));
+}
+
+void ARedVsBlueCharacter::Server_Fire_Implementation()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	
+	// Validar Game Phase
+	ARedVsBlueGameState* RBGameState = GetWorld()->GetGameState<ARedVsBlueGameState>();
+
+	if (!IsValid(RBGameState) || RBGameState->GetMatchPhase() != EMatchPhase::Playing)
+	{
+		return;
+	}
+
+	// Validar Player State
+
+	if (!IsValid(HealthComponent) || HealthComponent->IsDead() || CurrentAmmo <= 0)
+	{
+		return;
+	}
+
+	if (GetTeam() == ETeam::None)
+	{
+		return;
+	}
+
+	//Validar cadencia de fuego
+
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+
+	if (CurrentTime - LastFireTime < FireInterval)
+	{
+		return;
+	}
+	LastFireTime = CurrentTime;
+	CurrentAmmo--;
+	OnRep_CurrentAmmo();
+
+	AController* ShooterController = GetController();
+
+	if (!IsValid(ShooterController))
+	{
+		return;
+	}
+
+	const FVector TraceStart = GetPawnViewLocation();
+
+	const FVector ShotDirection = ShooterController->GetControlRotation().Vector();
+
+	const FVector TraceEnd = TraceStart + ShotDirection * WeaponRange;
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+	QueryParams.bTraceComplex = false;
+
+	const bool bHitSomething = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+
+	const FVector FinalEnd = bHitSomething ? HitResult.ImpactPoint : TraceEnd;
+
+	if (bHitSomething)
+	{
+		ARedVsBlueCharacter* HitCharacter = Cast<ARedVsBlueCharacter>(HitResult.GetActor());
+
+		// SI el personaje es valido, y no se esta disparando a si mismo, a un compañero de equipo o a alguien que no pertenezca a un equipo
+		if (IsValid(HitCharacter) && HitCharacter != this && HitCharacter->GetTeam() != ETeam::None && HitCharacter->GetTeam() != GetTeam())
+		{
+			UHealthComponent* TargetHealth = HitCharacter->FindComponentByClass<UHealthComponent>();
+			if (IsValid(TargetHealth) && !TargetHealth->IsDead())
+			{
+				const float AppliedDamage = UGameplayStatics::ApplyDamage(HitCharacter, WeaponDamage, ShooterController, this, UDamageType::StaticClass());
+				if (AppliedDamage > 0.f)
+				{
+					Client_HitConfirmed();
+				}
+			}
+		}
+	}
+
+	Multicast_FireEffects(TraceStart, FinalEnd, bHitSomething);
+}
+
+void ARedVsBlueCharacter::Multicast_FireEffects_Implementation(FVector TraceStart, FVector TraceEnd, bool bHitSomething)
+{
+	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, false, 0.3f, 0, 1.5f);
+	if (bHitSomething)
+	{
+		DrawDebugSphere(GetWorld(), TraceEnd, 12.f, 8, FColor::Red, false, 0.3f);
+	}
+}
+
+int32 ARedVsBlueCharacter::GetCurrentAmmo() const
+{
+	return CurrentAmmo;
+}
+
+int32 ARedVsBlueCharacter::GetMaxAmmo() const
+{
+	return MaxAmmo;
+}
+
 bool ARedVsBlueCharacter::GetIsCarrying()
 {
 	return IsValid(CarriedFlag);
@@ -240,11 +382,18 @@ void ARedVsBlueCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ARedVsBlueCharacter, CarriedFlag);
+
+	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, CurrentAmmo, COND_OwnerOnly);
 }
 
 void ARedVsBlueCharacter::Server_Interact_Implementation(AActor* TargetActor)
 {
 	if (!IsValid(TargetActor) || !TargetActor->Implements<UInteractInterface>()) 
+	{
+		return;
+	}
+
+	if (!IsValid(HealthComponent) || HealthComponent->IsDead())
 	{
 		return;
 	}
@@ -312,6 +461,33 @@ void ARedVsBlueCharacter::PawnClientRestart()
 		}
 
 	}
+}
+
+void ARedVsBlueCharacter::HandleCharacterDeath()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (IsValid(CarriedFlag))
+	{
+		CarriedFlag->DropFlag(this);
+	}
+
+	GetCharacterMovement()->DisableMovement();
+
+	ARedVsBlueGameModeBase* RBGameMode = Cast<ARedVsBlueGameModeBase>(UGameplayStatics::GetGameMode(this));
+
+	if (IsValid(RBGameMode))
+	{
+		RBGameMode->HandlePlayerDeath(this);
+	}
+}
+
+void ARedVsBlueCharacter::OnRep_CurrentAmmo()
+{
+	UE_LOG(LogTemp, Log, TEXT("Ammo: %d / %d"), CurrentAmmo, MaxAmmo);
 }
 
 

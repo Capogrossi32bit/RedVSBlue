@@ -8,6 +8,7 @@
 #include "TeamTypes.h"
 #include "RedVsBlueCharacter.generated.h"
 
+class UHealthComponent;
 class UStaticMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
@@ -59,6 +60,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MouseLookAction;
 
+	/** Mouse Look Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* FireAction;
+
 	/** Interact Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* InteractAction;
@@ -73,21 +78,48 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Flag")
 	UStaticMeshComponent* FlagMesh;
 
-public:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UHealthComponent> HealthComponent;
 
-	/** Constructor */
-	ARedVsBlueCharacter();	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,Category="Combat")
+	float WeaponDamage = 25.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float WeaponRange = 5000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float FireInterval = 0.25f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	int32 MaxAmmo = 30;
+
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentAmmo, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 CurrentAmmo = 30;
+
+	float LastFireTime = -1000.f;
 
 protected:
+
+	UFUNCTION()
+	virtual void BeginPlay() override;
 
 	/** Initialize input action bindings */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	UFUNCTION()
 	virtual void NotifyActorBeginOverlap(AActor* OtherActor) override;
+	
+	UFUNCTION()
 	virtual void NotifyActorEndOverlap(AActor* OtherActor) override;
-
+	
+	UFUNCTION()
 	virtual void PawnClientRestart() override;
 
+	UFUNCTION()
+	void HandleCharacterDeath();
+
+	UFUNCTION()
+	void OnRep_CurrentAmmo();
 protected:
 
 	/** Called for movement input */
@@ -95,6 +127,12 @@ protected:
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+
+
+public:
+
+	/** Constructor */
+	ARedVsBlueCharacter();
 
 public:
 
@@ -113,6 +151,24 @@ public:
 	/** Handles jump pressed inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
+
+	UFUNCTION()
+	void Fire();
+
+	UFUNCTION(Server,Reliable)
+	void Server_Fire();
+
+	UFUNCTION(Client,Reliable)
+	void Client_HitConfirmed();
+
+	UFUNCTION(NetMulticast,Unreliable)
+	void Multicast_FireEffects(FVector TraceStart, FVector TraceEnd, bool bHitSomething);
+
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	int32 GetCurrentAmmo() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	int32 GetMaxAmmo() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Getter")
 	bool GetIsCarrying();

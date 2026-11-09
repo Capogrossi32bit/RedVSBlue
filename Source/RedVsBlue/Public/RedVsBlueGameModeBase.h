@@ -7,6 +7,7 @@
 #include "RedVsBlueGameModeBase.generated.h"
 
 class APlayerState;
+class APlayerController;
 class ARedVsBlueCharacter;
 class AFlag;
 
@@ -21,6 +22,8 @@ public:
 
 	bool TryCaptureFlag(ARedVsBlueCharacter* ScoringCharacter, AFlag* HomeFlag);
 
+	void HandlePlayerDeath(ARedVsBlueCharacter* DeadCharacter);
+
 protected:
 
 	TMap<TWeakObjectPtr<APlayerState>, ETeam> AssignedTeams;
@@ -33,6 +36,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FTimerHandle MatchTimerHandle;
+
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category = "Respawn", meta = (ClampMin = "0.0"))
+	float RespawnDelay = 5.f;
+
+	UFUNCTION()
+	void RespawnPlayer(TWeakObjectPtr<APlayerController> PlayerController);
 
 	UFUNCTION()
 	virtual void BeginPlay() override;
@@ -55,4 +64,9 @@ protected:
 	UFUNCTION()
 	void AssignTeam(APlayerController* NewPlayer);
 	
+	UFUNCTION()
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
+
+	UFUNCTION()
+	virtual AActor* FindPlayerStart_Implementation(AController* Player, const FString& IncomingName) override;
 };

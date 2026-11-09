@@ -99,6 +99,8 @@ void AFlag::DropFlag(ARedVsBlueCharacter* RequestingCharacter)
 
     RequestingCharacter->SetCarriedFlag(nullptr);
 
+    Character = nullptr;
+
     SetActorLocation(DropLocation, false, nullptr, ETeleportType::TeleportPhysics);
 
     SetFlagState(EFlagState::Dropped);
