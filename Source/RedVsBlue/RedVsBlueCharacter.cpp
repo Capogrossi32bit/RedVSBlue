@@ -1,5 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #include "RedVsBlueCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -69,11 +67,12 @@ ARedVsBlueCharacter::ARedVsBlueCharacter()
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 
 	CurrentAmmo = MaxAmmo;
+	ReserveAmmo = MaxReserveAmmo;
 	LastFireTime = -1000.f;
+	bIsReloading = false;
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
-
 
 void ARedVsBlueCharacter::BeginPlay()
 {
@@ -82,6 +81,8 @@ void ARedVsBlueCharacter::BeginPlay()
 	if (HasAuthority() && IsValid(HealthComponent))
 	{
 		CurrentAmmo = MaxAmmo;
+		ReserveAmmo = MaxReserveAmmo;
+		bIsReloading = false;
 		HealthComponent->OnDeath.AddDynamic(this, &ARedVsBlueCharacter::HandleCharacterDeath);
 	}
 }
@@ -110,6 +111,9 @@ void ARedVsBlueCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 		// Shooting
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ARedVsBlueCharacter::Fire);
+
+		// Reloading
+		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Started, this, &ARedVsBlueCharacter::Reload);
 	}
 	else
 	{
@@ -133,47 +137,6 @@ void ARedVsBlueCharacter::Look(const FInputActionValue& Value)
 
 	// route the input
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
-}
-
-ETeam ARedVsBlueCharacter::GetTeam() const
-{
-	const ARedVsBluePlayerState* RBPlayerState = GetPlayerState<ARedVsBluePlayerState>();
-
-	if (!IsValid(RBPlayerState))
-    {
-        return ETeam::None;
-    }
-
-	return RBPlayerState->GetTeam();
-}
-
-void ARedVsBlueCharacter::OnRep_CarriedFlag()
-{
-	if (!IsValid(FlagMesh))
-	{
-		return;
-	}
-
-	if (!IsValid(CarriedFlag))
-	{
-		FlagMesh->SetVisibility(false);
-		FlagMesh->SetStaticMesh(nullptr);
-		return;
-	}
-	if (!IsValid(CarriedFlag->FlagMesh))
-	{
-		return;
-	}
-	UStaticMeshComponent* SourceMesh = CarriedFlag->FlagMesh;
-
-	FlagMesh->SetStaticMesh(SourceMesh->GetStaticMesh());
-
-	for (int32 Index = 0; Index < SourceMesh->GetNumMaterials();Index++)
-	{
-		FlagMesh->SetMaterial(Index, SourceMesh->GetMaterial(Index));
-	}
-
-	FlagMesh->SetVisibility(true);
 }
 
 void ARedVsBlueCharacter::DoMove(float Right, float Forward)
@@ -218,6 +181,185 @@ void ARedVsBlueCharacter::DoJumpEnd()
 	StopJumping();
 }
 
+void ARedVsBlueCharacter::NotifyActorBeginOverlap(AActor* OtherActor)
+{
+	OverlapActor = OtherActor;
+}
+
+void ARedVsBlueCharacter::NotifyActorEndOverlap(AActor* OtherActor)
+{
+	if (OverlapActor == OtherActor) 
+	{
+		OverlapActor = nullptr;
+	}
+}
+
+void ARedVsBlueCharacter::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+
+	if (!IsValid(PC) || !PC->IsLocalController())
+	{
+		return;
+	}
+
+	ULocalPlayer* LocalPlayer = PC->GetLocalPlayer();
+
+	if (!IsValid(LocalPlayer))
+	{
+		return;
+	}
+
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer);
+
+	if (IsValid(Subsystem))
+	{
+		if (IsValid(DefaultMappingContext))
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+		if (IsValid(MouseMoveMappingContext))
+		{
+			Subsystem->AddMappingContext(MouseMoveMappingContext, 1);
+		}
+
+	}
+}
+
+void ARedVsBlueCharacter::HandleCharacterDeath()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	
+	CancelReload();
+
+	if (IsValid(CarriedFlag))
+	{
+		CarriedFlag->DropFlag(this);
+	}
+
+	GetCharacterMovement()->DisableMovement();
+
+	ARedVsBlueGameModeBase* RBGameMode = Cast<ARedVsBlueGameModeBase>(UGameplayStatics::GetGameMode(this));
+
+	if (IsValid(RBGameMode))
+	{
+		RBGameMode->HandlePlayerDeath(this);
+	}
+}
+
+
+
+void ARedVsBlueCharacter::InteractOtherActor()
+{
+	if (IsValid(OverlapActor) && OverlapActor->Implements<UInteractInterface>())
+	{
+		Server_Interact(OverlapActor.Get());
+	}
+}
+
+ETeam ARedVsBlueCharacter::GetTeam() const
+{
+	const ARedVsBluePlayerState* RBPlayerState = GetPlayerState<ARedVsBluePlayerState>();
+
+	if (!IsValid(RBPlayerState))
+	{
+		return ETeam::None;
+	}
+
+	return RBPlayerState->GetTeam();
+}
+
+// ========================= FLAG =========================
+
+bool ARedVsBlueCharacter::GetIsCarrying()
+{
+	return IsValid(CarriedFlag);
+}
+
+AFlag* ARedVsBlueCharacter::GetCarriedFlag() const
+{
+	return CarriedFlag.Get();
+}
+
+void ARedVsBlueCharacter::SetCarriedFlag(AFlag* NewFlag)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	CarriedFlag = NewFlag;
+
+	OnRep_CarriedFlag();
+	ForceNetUpdate();
+}
+
+void ARedVsBlueCharacter::DropCarriedFlag()
+{
+	Server_DropFlag();
+}
+
+// ========================= COMBAT =========================
+
+void ARedVsBlueCharacter::FinishReload()
+{
+	if (!HasAuthority() || !bIsReloading)
+	{
+		return;
+	}
+
+	ARedVsBlueGameState* RBGameState = GetWorld()->GetGameState<ARedVsBlueGameState>();
+
+	if (!IsValid(RBGameState) || RBGameState->GetMatchPhase() != EMatchPhase::Playing || !IsValid(HealthComponent) || HealthComponent->IsDead())
+	{
+		CancelReload();
+		return;
+	}
+
+	const int32 AmmoNeeded = FMath::Max(0, MaxAmmo - CurrentAmmo);
+	const int32 AmmoToReload = FMath::Min(AmmoNeeded, ReserveAmmo);
+
+	//Lo agrego a la municion actual
+	CurrentAmmo += AmmoToReload;
+
+	//Lo quito de las reservas
+	ReserveAmmo -= AmmoToReload;
+
+	bIsReloading = false;
+	GetWorldTimerManager().ClearTimer(ReloadTimerHandle);
+
+	OnRep_CurrentAmmo();
+	OnRep_ReserveAmmo();
+	OnRep_IsReloading();
+
+	ForceNetUpdate();
+
+	UE_LOG(LogTemp, Warning, TEXT("RELOAD COMPLETE | Ammo: %d | Reserve: %d"), CurrentAmmo, ReserveAmmo);
+}
+
+void ARedVsBlueCharacter::CancelReload()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(ReloadTimerHandle);
+
+	if (bIsReloading)
+	{
+		bIsReloading = false;
+		OnRep_IsReloading();
+		ForceNetUpdate();
+	}
+}
+
+
 void ARedVsBlueCharacter::Fire()
 {
 	if (!IsLocallyControlled())
@@ -227,9 +369,90 @@ void ARedVsBlueCharacter::Fire()
 	Server_Fire();
 }
 
-void ARedVsBlueCharacter::Client_HitConfirmed_Implementation()
+void ARedVsBlueCharacter::Reload()
 {
-	UE_LOG(LogTemp, Warning, TEXT("Hit Confirmed!"));
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+	Server_Reload();
+}
+
+int32 ARedVsBlueCharacter::GetReserveAmmo() const
+{
+	return ReserveAmmo;
+}
+
+bool ARedVsBlueCharacter::IsReloading() const
+{
+	return bIsReloading;
+}
+
+int32 ARedVsBlueCharacter::GetCurrentAmmo() const
+{
+	return CurrentAmmo;
+}
+
+int32 ARedVsBlueCharacter::GetMaxAmmo() const
+{
+	return MaxAmmo;
+}
+
+// ========================= RPC =========================
+
+void ARedVsBlueCharacter::Server_Interact_Implementation(AActor* TargetActor)
+{
+	if (!IsValid(TargetActor) || !TargetActor->Implements<UInteractInterface>())
+	{
+		return;
+	}
+
+	if (!IsValid(HealthComponent) || HealthComponent->IsDead())
+	{
+		return;
+	}
+	const float Distance = FVector::Dist(GetActorLocation(), TargetActor->GetActorLocation());
+
+	if (Distance > 250.f)
+	{
+		return;
+	}
+
+	const ETeam CurrentTeam = GetTeam();
+
+	if (CurrentTeam == ETeam::None)
+	{
+		return;
+	}
+
+	const FString TeamString = CurrentTeam == ETeam::Blue ? TEXT("Blue") : TEXT("Red");
+
+	IInteractInterface::Execute_Interact(TargetActor, this, TeamString, GetIsCarrying());
+}
+
+void ARedVsBlueCharacter::Server_DropFlag_Implementation()
+{
+	ARedVsBlueGameState* RBGameState = GetWorld()->GetGameState<ARedVsBlueGameState>();
+
+	if (!IsValid(RBGameState) || RBGameState->GetMatchPhase() != EMatchPhase::Playing)
+	{
+		return;
+	}
+
+	if (!IsValid(CarriedFlag))
+	{
+		return;
+	}
+	CarriedFlag->DropFlag(this);
+}
+
+void ARedVsBlueCharacter::Multicast_FireEffects_Implementation(FVector TraceStart, FVector TraceEnd, bool bHitSomething)
+{
+	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, false, 0.3f, 0, 1.5f);
+	if (bHitSomething)
+	{
+		DrawDebugSphere(GetWorld(), TraceEnd, 12.f, 8, FColor::Red, false, 0.3f);
+	}
 }
 
 void ARedVsBlueCharacter::Server_Fire_Implementation()
@@ -238,7 +461,7 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 	{
 		return;
 	}
-	
+
 	// Validar Game Phase
 	ARedVsBlueGameState* RBGameState = GetWorld()->GetGameState<ARedVsBlueGameState>();
 
@@ -249,7 +472,7 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 
 	// Validar Player State
 
-	if (!IsValid(HealthComponent) || HealthComponent->IsDead() || CurrentAmmo <= 0)
+	if (!IsValid(HealthComponent) || HealthComponent->IsDead() || CurrentAmmo <= 0 || bIsReloading)
 	{
 		return;
 	}
@@ -315,80 +538,21 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 	Multicast_FireEffects(TraceStart, FinalEnd, bHitSomething);
 }
 
-void ARedVsBlueCharacter::Multicast_FireEffects_Implementation(FVector TraceStart, FVector TraceEnd, bool bHitSomething)
+void ARedVsBlueCharacter::Client_HitConfirmed_Implementation()
 {
-	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, false, 0.3f, 0, 1.5f);
-	if (bHitSomething)
-	{
-		DrawDebugSphere(GetWorld(), TraceEnd, 12.f, 8, FColor::Red, false, 0.3f);
-	}
+	UE_LOG(LogTemp, Warning, TEXT("Hit Confirmed!"));
 }
 
-int32 ARedVsBlueCharacter::GetCurrentAmmo() const
-{
-	return CurrentAmmo;
-}
-
-int32 ARedVsBlueCharacter::GetMaxAmmo() const
-{
-	return MaxAmmo;
-}
-
-bool ARedVsBlueCharacter::GetIsCarrying()
-{
-	return IsValid(CarriedFlag);
-}
-
-AFlag* ARedVsBlueCharacter::GetCarriedFlag() const
-{
-	return CarriedFlag.Get();
-}
-
-void ARedVsBlueCharacter::SetCarriedFlag(AFlag* NewFlag)
+void ARedVsBlueCharacter::Server_Reload_Implementation()
 {
 	if (!HasAuthority())
 	{
 		return;
 	}
 
-	CarriedFlag = NewFlag;
-
-	OnRep_CarriedFlag();
-	ForceNetUpdate();
-}
-
-void ARedVsBlueCharacter::DropCarriedFlag()
-{
-	Server_DropFlag();
-}
-
-void ARedVsBlueCharacter::Server_DropFlag_Implementation()
-{
 	ARedVsBlueGameState* RBGameState = GetWorld()->GetGameState<ARedVsBlueGameState>();
 
 	if (!IsValid(RBGameState) || RBGameState->GetMatchPhase() != EMatchPhase::Playing)
-	{
-		return;
-	}
-
-	if (!IsValid(CarriedFlag))
-	{
-		return;
-	}
-	CarriedFlag->DropFlag(this);
-}
-
-void ARedVsBlueCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ARedVsBlueCharacter, CarriedFlag);
-
-	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, CurrentAmmo, COND_OwnerOnly);
-}
-
-void ARedVsBlueCharacter::Server_Interact_Implementation(AActor* TargetActor)
-{
-	if (!IsValid(TargetActor) || !TargetActor->Implements<UInteractInterface>()) 
 	{
 		return;
 	}
@@ -397,92 +561,51 @@ void ARedVsBlueCharacter::Server_Interact_Implementation(AActor* TargetActor)
 	{
 		return;
 	}
-	const float Distance = FVector::Dist(GetActorLocation(), TargetActor->GetActorLocation());
 
-	if (Distance > 250.f)
+	if (bIsReloading)
 	{
 		return;
 	}
 
-	const ETeam CurrentTeam = GetTeam();
-
-	if (CurrentTeam == ETeam::None) 
+	if (CurrentAmmo >= MaxAmmo)
 	{
 		return;
 	}
 
-	const FString TeamString = CurrentTeam == ETeam::Blue ? TEXT("Blue") : TEXT("Red");
+	if (ReserveAmmo <= 0)
+	{
+		return;
+	}
 
-	IInteractInterface::Execute_Interact(TargetActor, this, TeamString, GetIsCarrying());
+	bIsReloading = true;
+	OnRep_IsReloading();
+	ForceNetUpdate();
+
+	GetWorldTimerManager().SetTimer(ReloadTimerHandle, this, &ARedVsBlueCharacter::FinishReload, FMath::Max(0.1f, ReloadDuration), false);
+
+	UE_LOG(LogTemp, Warning, TEXT("RELOAD STARTED | Ammo: %d | Reserve: %d"), CurrentAmmo, ReserveAmmo);
 }
 
-void ARedVsBlueCharacter::NotifyActorBeginOverlap(AActor* OtherActor)
+//  ========================= REPLICATION =========================
+
+
+void ARedVsBlueCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	OverlapActor = OtherActor;
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ARedVsBlueCharacter, CarriedFlag);
+	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, CurrentAmmo, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, ReserveAmmo, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, bIsReloading, COND_OwnerOnly);
 }
 
-void ARedVsBlueCharacter::NotifyActorEndOverlap(AActor* OtherActor)
+void ARedVsBlueCharacter::OnRep_ReserveAmmo()
 {
-	if (OverlapActor == OtherActor) 
-	{
-		OverlapActor = nullptr;
-	}
+	UE_LOG(LogTemp, Log, TEXT("RESERVE AMMO: %d"), ReserveAmmo);
 }
 
-void ARedVsBlueCharacter::PawnClientRestart()
+void ARedVsBlueCharacter::OnRep_IsReloading()
 {
-	Super::PawnClientRestart();
-
-	APlayerController* PC = Cast<APlayerController>(GetController());
-
-	if (!IsValid(PC) || !PC->IsLocalController())
-	{
-		return;
-	}
-
-	ULocalPlayer* LocalPlayer = PC->GetLocalPlayer();
-
-	if (!IsValid(LocalPlayer))
-	{
-		return;
-	}
-
-	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer);
-
-	if (IsValid(Subsystem))
-	{
-		if (IsValid(DefaultMappingContext))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-		if (IsValid(MouseMoveMappingContext))
-		{
-			Subsystem->AddMappingContext(MouseMoveMappingContext, 1);
-		}
-
-	}
-}
-
-void ARedVsBlueCharacter::HandleCharacterDeath()
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	if (IsValid(CarriedFlag))
-	{
-		CarriedFlag->DropFlag(this);
-	}
-
-	GetCharacterMovement()->DisableMovement();
-
-	ARedVsBlueGameModeBase* RBGameMode = Cast<ARedVsBlueGameModeBase>(UGameplayStatics::GetGameMode(this));
-
-	if (IsValid(RBGameMode))
-	{
-		RBGameMode->HandlePlayerDeath(this);
-	}
+	UE_LOG(LogTemp, Log, TEXT("RELOADING: %s"), bIsReloading ? TEXT("YES") : TEXT("NO"));
 }
 
 void ARedVsBlueCharacter::OnRep_CurrentAmmo()
@@ -490,11 +613,31 @@ void ARedVsBlueCharacter::OnRep_CurrentAmmo()
 	UE_LOG(LogTemp, Log, TEXT("Ammo: %d / %d"), CurrentAmmo, MaxAmmo);
 }
 
-
-void ARedVsBlueCharacter::InteractOtherActor()
+void ARedVsBlueCharacter::OnRep_CarriedFlag()
 {
-	if (IsValid(OverlapActor) && OverlapActor->Implements<UInteractInterface>())
+	if (!IsValid(FlagMesh))
 	{
-		Server_Interact(OverlapActor.Get());
+		return;
 	}
+
+	if (!IsValid(CarriedFlag))
+	{
+		FlagMesh->SetVisibility(false);
+		FlagMesh->SetStaticMesh(nullptr);
+		return;
+	}
+	if (!IsValid(CarriedFlag->FlagMesh))
+	{
+		return;
+	}
+	UStaticMeshComponent* SourceMesh = CarriedFlag->FlagMesh;
+
+	FlagMesh->SetStaticMesh(SourceMesh->GetStaticMesh());
+
+	for (int32 Index = 0; Index < SourceMesh->GetNumMaterials();Index++)
+	{
+		FlagMesh->SetMaterial(Index, SourceMesh->GetMaterial(Index));
+	}
+
+	FlagMesh->SetVisibility(true);
 }

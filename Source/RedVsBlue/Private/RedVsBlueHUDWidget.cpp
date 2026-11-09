@@ -2,9 +2,12 @@
 
 #include "RedVsBlueGameState.h"
 #include "RedVsBluePlayerState.h"
+#include "RedVsBlueCharacter.h"
+#include "HealthComponent.h"
 #include "MatchPhase.h"
 #include "TeamTypes.h"
 
+#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
@@ -96,6 +99,7 @@ void URedVsBlueHUDWidget::RefreshHUD()
 
 	//Resultado
 
+	RefreshCombatHUD();
 
 	if (CurrentPhase != EMatchPhase::Finished)
 	{
@@ -123,4 +127,79 @@ void URedVsBlueHUDWidget::RefreshHUD()
 	}
 
 	ResultText->SetText(FText::FromString(ResultString));
+}
+
+void URedVsBlueHUDWidget::RefreshCombatHUD()
+{
+
+	APlayerController* PC = GetOwningPlayer();
+
+	if (!IsValid(PC))
+	{
+		return;
+	}
+	ARedVsBlueCharacter* Character = Cast<ARedVsBlueCharacter>(PC->GetPawn());
+	
+	if (!IsValid(Character))
+	{
+		if (IsValid(HealthBar))
+		{
+			HealthBar->SetPercent(0.f);
+		}
+
+		if (IsValid(HealthText))
+		{
+			HealthText->SetText(FText::FromString(TEXT("-- / -- HP")));
+		}
+
+		if (IsValid(AmmoText))
+		{
+			AmmoText->SetText(FText::FromString(TEXT("-- / --")));
+		}
+
+		if (IsValid(ReloadText))
+		{
+			ReloadText->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		return;
+	}
+
+	UHealthComponent* HealthComponent = Character->FindComponentByClass<UHealthComponent>();
+
+	if (IsValid(HealthComponent))
+	{
+		const float CurrentHealth = HealthComponent->GetHealth();
+
+		const float MaxHealth = HealthComponent->GetMaxHealth();
+
+		const float HealthPercent = MaxHealth > 0.f ? FMath::Clamp(CurrentHealth / MaxHealth, 0.f, 1.f) : 0.f;
+
+		if (IsValid(HealthBar))
+		{
+			HealthBar->SetPercent(HealthPercent);
+		}
+		if (IsValid(HealthText))
+		{
+			HealthText->SetText(FText::FromString(FString::Printf(TEXT("%.0f / %.0f HP"), CurrentHealth, MaxHealth)));
+		}
+	}
+
+	if (IsValid(AmmoText))
+	{
+		AmmoText->SetText(FText::FromString(FString::Printf(TEXT("%d / %d"), Character->GetCurrentAmmo(), Character->GetReserveAmmo())));
+	}
+
+	
+
+	if (IsValid(ReloadText))
+	{
+		const bool bReloading = Character->IsReloading();
+
+		ReloadText->SetVisibility(bReloading ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		
+		if (bReloading)
+		{
+			ReloadText->SetText(FText::FromString(TEXT("RECARGANDO...")));
+		}
+	}
 }

@@ -7,6 +7,7 @@
 #include "RedVsBlueHUDWidget.generated.h"
 
 class UTextBlock;
+class UProgressBar;
 
 UCLASS()
 class REDVSBLUE_API URedVsBlueHUDWidget : public UUserWidget
@@ -17,6 +18,9 @@ class REDVSBLUE_API URedVsBlueHUDWidget : public UUserWidget
 public:
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	void RefreshHUD();
+
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	void RefreshCombatHUD();
 
 protected:
 
@@ -37,4 +41,16 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> ResultText;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UProgressBar> HealthBar;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> HealthText;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> AmmoText;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> ReloadText;
 };

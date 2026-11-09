@@ -59,11 +59,11 @@ protected:
 	void UpdateMatchTimer();
 
 	UFUNCTION()
-	virtual void PostLogin(APlayerController* NewPlayer) override;
+	void AssignTeam(APlayerController* NewPlayer);
 
 	UFUNCTION()
-	void AssignTeam(APlayerController* NewPlayer);
-	
+	virtual void OnPostLogin(AController* NewPlayer) override;
+
 	UFUNCTION()
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 

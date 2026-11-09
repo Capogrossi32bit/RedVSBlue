@@ -108,7 +108,7 @@ AActor* ARedVsBlueGameModeBase::ChoosePlayerStart_Implementation(AController* Pl
 
 	if (PlayerTeam == ETeam::None)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SPAWN | Player has no team"));
+		UE_LOG(LogTemp, Warning, TEXT("SPAWN | Team not assigned yet"));
 		return Super::ChoosePlayerStart_Implementation(Player);
 
 	}
@@ -256,15 +256,9 @@ void ARedVsBlueGameModeBase::UpdateMatchTimer()
 	}
 }
 
-void ARedVsBlueGameModeBase::PostLogin(APlayerController* NewPlayer)
-{
-	Super::PostLogin(NewPlayer);
-	AssignTeam(NewPlayer);
-}
-
 void ARedVsBlueGameModeBase::AssignTeam(APlayerController* NewPlayer)
 {
-	if (!IsValid(NewPlayer) || !IsValid(GameState))
+	if (!IsValid(NewPlayer))
 	{
 		return;
 	}
@@ -299,7 +293,11 @@ void ARedVsBlueGameModeBase::AssignTeam(APlayerController* NewPlayer)
 
 	if (AssignedTeams.Contains(NewPlayerState))
 	{
-		return;
+		if (NewPlayerState->GetTeam() != ETeam::None)
+		{
+			return;
+		}
+		AssignedTeams.Remove(NewPlayerState);
 	}
 
 	ETeam AssignedTeam =
@@ -307,7 +305,41 @@ void ARedVsBlueGameModeBase::AssignTeam(APlayerController* NewPlayer)
 
 	NewPlayerState->SetTeam(AssignedTeam);
 
+	UE_LOG(LogTemp, Warning,
+		TEXT("TEAM ASSIGNED | Controller: %s | Team: %d"),
+		*GetNameSafe(NewPlayer),
+		static_cast<int32>(NewPlayerState->GetTeam()));
+
 	AssignedTeams.Add(NewPlayerState, AssignedTeam);
+
+}
+
+void ARedVsBlueGameModeBase::OnPostLogin(AController* NewPlayer)
+{
+	Super::OnPostLogin(NewPlayer);
+	APlayerController* PC = Cast<APlayerController>(NewPlayer);
+	if (!IsValid(PC))
+	{
+		return;
+	}
+
+	// Asignar el equipo antes del spawn normal.
+	AssignTeam(PC);
+
+	ARedVsBluePlayerState* RBPlayerState =
+		PC->GetPlayerState<ARedVsBluePlayerState>();
+
+	if (!IsValid(RBPlayerState))
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("LOGIN FAILED | Invalid PlayerState"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("LOGIN | Controller: %s | Team: %d"),
+		*GetNameSafe(PC),
+		static_cast<int32>(RBPlayerState->GetTeam()));
 
 }
 

@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "TeamTypes.h"
+#include "TimerManager.h"
 #include "RedVsBlueCharacter.generated.h"
 
 class UHealthComponent;
@@ -68,9 +69,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* InteractAction;
 
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> ReloadAction;
+
 	/** Drop Flag Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* DropFlagAction;
+
+protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedFlag,EditAnywhere,BlueprintReadWrite, Category = "Flag")
 	TObjectPtr<AFlag> CarriedFlag = nullptr;
@@ -80,6 +86,8 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UHealthComponent> HealthComponent;
+
+protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,Category="Combat")
 	float WeaponDamage = 25.f;
@@ -91,13 +99,36 @@ protected:
 	float FireInterval = 0.25f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float LastFireTime = -1000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	int32 MaxAmmo = 30;
 
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentAmmo, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	int32 CurrentAmmo = 30;
 
-	float LastFireTime = -1000.f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	int32 MaxReserveAmmo = 90;
 
+	UPROPERTY(ReplicatedUsing = OnRep_ReserveAmmo, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 ReserveAmmo = 90;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.1"))
+	float ReloadDuration = 2.5f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_IsReloading, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	bool bIsReloading = false;
+
+	UPROPERTY()
+	FTimerHandle ReloadTimerHandle;
+
+	UFUNCTION()
+	void FinishReload();
+
+	UFUNCTION()
+	void CancelReload();
+
+	//Actor related protected functions
 protected:
 
 	UFUNCTION()
@@ -118,8 +149,19 @@ protected:
 	UFUNCTION()
 	void HandleCharacterDeath();
 
+	// Network related protected functions
+protected:
+
+	UFUNCTION()
+	void OnRep_ReserveAmmo();
+
+	UFUNCTION()
+	void OnRep_IsReloading();
+
 	UFUNCTION()
 	void OnRep_CurrentAmmo();
+
+// Input related protected functions
 protected:
 
 	/** Called for movement input */
@@ -134,6 +176,7 @@ public:
 	/** Constructor */
 	ARedVsBlueCharacter();
 
+	// Input related public functions
 public:
 
 	/** Handles move inputs from either controls or UI interfaces */
@@ -152,6 +195,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
+
+	// Combat related public functions
+public:
 	UFUNCTION()
 	void Fire();
 
@@ -170,6 +216,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	int32 GetMaxAmmo() const;
 
+	UFUNCTION()
+	void Reload();
+
+	UFUNCTION(Server,Reliable)
+	void Server_Reload();
+
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	int32 GetReserveAmmo() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool IsReloading() const;
+
+// Flag related public functions
+public:
 	UFUNCTION(BlueprintCallable, Category = "Getter")
 	bool GetIsCarrying();
 
@@ -193,10 +253,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Team")
 	ETeam GetTeam() const;
 
-	UFUNCTION()
-	void OnRep_CarriedFlag();
+
 
 	void InteractOtherActor();
+
+//Network related public functions
+public:
+
+	UFUNCTION()
+	void OnRep_CarriedFlag();
 
 public:
 
