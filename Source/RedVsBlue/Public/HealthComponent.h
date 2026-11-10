@@ -4,6 +4,8 @@
 #include "Components/ActorComponent.h"
 #include "HealthComponent.generated.h"
 
+class AController;
+
 //Evento de recibir y realizar daño
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnHealthChanged, 
@@ -38,6 +40,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Health")
 	FOnDeath OnDeath;
 
+	UFUNCTION()
+	AController* GetKillingController() const;
+
 	//FUNCTIONS
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
@@ -70,4 +75,7 @@ protected:
 private:
 
 	void SetHealth(float NewHealth);
+
+	UPROPERTY()
+	TWeakObjectPtr<AController> KillingController;
 };

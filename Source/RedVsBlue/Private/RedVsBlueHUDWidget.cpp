@@ -81,6 +81,18 @@ void URedVsBlueHUDWidget::RefreshHUD()
 		if (IsValid(RBPlayerState))
 		{
 			LocalTeam = RBPlayerState->GetTeam();
+			if (IsValid(RBPlayerState))
+			{
+				if (IsValid(KillsText))
+				{
+					KillsText->SetText(FText::FromString(FString::Printf(TEXT("KILLS: %d"),RBPlayerState->GetKills())));
+				}
+
+				if (IsValid(DeathsText))
+				{
+					DeathsText->SetText(FText::FromString(FString::Printf(TEXT("DEATHS: %d"),RBPlayerState->GetDeaths())));
+				}
+			}
 		}
 	}
 

@@ -14,10 +14,31 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Team, BlueprintReadOnly, Category = "Team")
 	ETeam Team = ETeam::None;
 
+	UPROPERTY(ReplicatedUsing = OnRep_Kills, BlueprintReadOnly, Category = "Statistics")
+	int32 Kills = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Deaths, BlueprintReadOnly, Category = "Statistics")
+	int32 Deaths = 0;
+
 	UFUNCTION(BlueprintCallable,Category = "Team")
 	ETeam GetTeam() const;
 
+	UFUNCTION()
 	void SetTeam(ETeam NewTeam);
+
+	UFUNCTION()
+	void AddKill();
+
+	UFUNCTION()
+	void AddDeath();
+
+	UFUNCTION()
+	int32 GetKills() const;
+
+	UFUNCTION()
+	int32 GetDeaths() const;
+
+	FSimpleMulticastDelegate OnTeamChanged;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -25,4 +46,10 @@ protected:
 
 	UFUNCTION()
 	void OnRep_Team();
+
+	UFUNCTION()
+	void OnRep_Kills();
+
+	UFUNCTION()
+	void OnRep_Deaths();
 };

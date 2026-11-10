@@ -1,6 +1,9 @@
 #include "RedVsBlueCharacter.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/LocalPlayer.h"
@@ -17,6 +20,7 @@
 #include "InputMappingContext.h"
 #include "InputActionValue.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "RedVsBlue.h"
 #include "RedVsBlueGameState.h"
@@ -34,7 +38,8 @@ ARedVsBlueCharacter::ARedVsBlueCharacter()
 	bUseControllerRotationRoll = false;
 
 	// Configure character movement
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	GetCharacterMovement()->bUseControllerDesiredRotation = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
 
 	// Note: For faster iteration times these variables, and many more, can be tweaked in the Character Blueprint
@@ -46,11 +51,15 @@ ARedVsBlueCharacter::ARedVsBlueCharacter()
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 
+
 	// Create a camera boom (pulls in towards the player if there is a collision)
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 400.0f;
 	CameraBoom->bUsePawnControlRotation = true;
+
+	CameraBoom->TargetOffset = FVector(0.f, 0.f, 65.f);
+	CameraBoom->SocketOffset = FVector(0.f, 85.f, 35.f);
 
 	// Create a follow camera
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
@@ -70,6 +79,11 @@ ARedVsBlueCharacter::ARedVsBlueCharacter()
 	ReserveAmmo = MaxReserveAmmo;
 	LastFireTime = -1000.f;
 	bIsReloading = false;
+
+	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	WeaponMesh->SetupAttachment(GetMesh(), TEXT("WeaponSocket"));
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -84,6 +98,7 @@ void ARedVsBlueCharacter::BeginPlay()
 		ReserveAmmo = MaxReserveAmmo;
 		bIsReloading = false;
 		HealthComponent->OnDeath.AddDynamic(this, &ARedVsBlueCharacter::HandleCharacterDeath);
+		BindTeamMaterial();
 	}
 }
 
@@ -262,6 +277,8 @@ void ARedVsBlueCharacter::InteractOtherActor()
 	}
 }
 
+// ========================= TEAM =========================
+
 ETeam ARedVsBlueCharacter::GetTeam() const
 {
 	const ARedVsBluePlayerState* RBPlayerState = GetPlayerState<ARedVsBluePlayerState>();
@@ -273,6 +290,60 @@ ETeam ARedVsBlueCharacter::GetTeam() const
 
 	return RBPlayerState->GetTeam();
 }
+
+void ARedVsBlueCharacter::UpdateTeamMaterial()
+{
+	if(!IsValid(GetMesh()))
+	{
+		return;
+	}
+
+	const ETeam CurrentTeam = GetTeam();
+
+	if (CurrentTeam == ETeam::None)
+	{
+		return;
+	}
+
+	if (!IsValid(TeamMaterialInstance))
+	{
+		TeamMaterialInstance = GetMesh()->CreateDynamicMaterialInstance(TeamMaterialIndex);
+	}
+
+	if(!IsValid(TeamMaterialInstance))
+	{
+		return;
+	}
+
+	const FLinearColor NewColor = CurrentTeam == ETeam::Blue ? BlueTeamColor : RedTeamColor;
+
+	TeamMaterialInstance->SetVectorParameterValue(TEXT("TeamColor"), NewColor);
+}
+
+void ARedVsBlueCharacter::BindTeamMaterial()
+{
+	ARedVsBluePlayerState* RBPlayerState = GetPlayerState<ARedVsBluePlayerState>();
+
+	if (!IsValid(RBPlayerState))
+	{
+		return;
+	}
+
+	RBPlayerState->OnTeamChanged.RemoveAll(this);
+
+	RBPlayerState->OnTeamChanged.AddUObject(this, &ARedVsBlueCharacter::UpdateTeamMaterial);
+
+	UpdateTeamMaterial();
+}
+
+
+void ARedVsBlueCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	BindTeamMaterial();
+}
+
 
 // ========================= FLAG =========================
 
@@ -305,6 +376,24 @@ void ARedVsBlueCharacter::DropCarriedFlag()
 }
 
 // ========================= COMBAT =========================
+
+
+void ARedVsBlueCharacter::PlayCombatMontage(UAnimMontage* Montage, float PlayRate)
+{
+	if (!IsValid(Montage) || !IsValid(GetMesh()))
+	{
+		return;
+	}
+
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+
+	if (!IsValid(AnimInstance))
+	{
+		return;
+	}
+
+	AnimInstance->Montage_Play(Montage, PlayRate);
+}
 
 void ARedVsBlueCharacter::FinishReload()
 {
@@ -359,6 +448,17 @@ void ARedVsBlueCharacter::CancelReload()
 	}
 }
 
+
+float ARedVsBlueCharacter::GetAimPitch() const
+{
+	const FRotator AimRotation = GetBaseAimRotation();
+
+	const FRotator CharacterRotation = GetActorRotation();
+
+	const FRotator DeltaRotation = (AimRotation - CharacterRotation).GetNormalized();
+
+	return FMath::Clamp(DeltaRotation.Pitch / 60.f, -1.f, 1.f);
+}
 
 void ARedVsBlueCharacter::Fire()
 {
@@ -448,6 +548,7 @@ void ARedVsBlueCharacter::Server_DropFlag_Implementation()
 
 void ARedVsBlueCharacter::Multicast_FireEffects_Implementation(FVector TraceStart, FVector TraceEnd, bool bHitSomething)
 {
+	PlayCombatMontage(FireMontage);
 	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, false, 0.3f, 0, 1.5f);
 	if (bHitSomething)
 	{
@@ -466,6 +567,13 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 	ARedVsBlueGameState* RBGameState = GetWorld()->GetGameState<ARedVsBlueGameState>();
 
 	if (!IsValid(RBGameState) || RBGameState->GetMatchPhase() != EMatchPhase::Playing)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+
+	if (!IsValid(World))
 	{
 		return;
 	}
@@ -501,24 +609,48 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 		return;
 	}
 
-	const FVector TraceStart = GetPawnViewLocation();
+	//Camara
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	ShooterController->GetPlayerViewPoint(CameraLocation, CameraRotation);
 
-	const FVector ShotDirection = ShooterController->GetControlRotation().Vector();
+	const FVector CameraTraceStart = CameraLocation;
+	const FVector CameraTraceEnd = CameraTraceStart + (CameraRotation.Vector() * WeaponRange);
 
-	const FVector TraceEnd = TraceStart + ShotDirection * WeaponRange;
+	FHitResult CameraHitResult;
+	FCollisionQueryParams CameraQueryParams;
+	CameraQueryParams.AddIgnoredActor(this);
+	CameraQueryParams.bTraceComplex = false;
 
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
-	QueryParams.bTraceComplex = false;
+	const bool bCameraHitSomething = GetWorld()->LineTraceSingleByChannel(CameraHitResult, CameraTraceStart, CameraTraceEnd, ECC_Visibility, CameraQueryParams);
 
-	const bool bHitSomething = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	const FVector AimPoint = bCameraHitSomething ? CameraHitResult.ImpactPoint : CameraTraceEnd;
 
-	const FVector FinalEnd = bHitSomething ? HitResult.ImpactPoint : TraceEnd;
 
-	if (bHitSomething)
+	// Pistola
+
+	const FName MuzzleSocketName(TEXT("MuzzleSocket"));
+
+	const FVector MuzzleLocation = WeaponMesh->DoesSocketExist(MuzzleSocketName) ? WeaponMesh->GetSocketLocation(MuzzleSocketName) : WeaponMesh->GetComponentLocation();
+
+	const FVector ShotDirection = (AimPoint - MuzzleLocation).GetSafeNormal();
+
+	if (ShotDirection.IsNearlyZero())
 	{
-		ARedVsBlueCharacter* HitCharacter = Cast<ARedVsBlueCharacter>(HitResult.GetActor());
+		return;
+	}
+
+	const FVector WeaponTraceEnd = MuzzleLocation + ShotDirection * WeaponRange;
+
+	FHitResult WeaponHit;
+
+	const bool bWeaponHit = World->LineTraceSingleByChannel(WeaponHit,MuzzleLocation,WeaponTraceEnd,ECC_Visibility,CameraQueryParams);
+
+	const FVector FinalEnd = bWeaponHit ? WeaponHit.ImpactPoint : WeaponTraceEnd;
+
+	if (bWeaponHit)
+	{
+		ARedVsBlueCharacter* HitCharacter = Cast<ARedVsBlueCharacter>(WeaponHit.GetActor());
 
 		// SI el personaje es valido, y no se esta disparando a si mismo, a un compañero de equipo o a alguien que no pertenezca a un equipo
 		if (IsValid(HitCharacter) && HitCharacter != this && HitCharacter->GetTeam() != ETeam::None && HitCharacter->GetTeam() != GetTeam())
@@ -535,7 +667,7 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 		}
 	}
 
-	Multicast_FireEffects(TraceStart, FinalEnd, bHitSomething);
+	Multicast_FireEffects(MuzzleLocation, FinalEnd, bWeaponHit);
 }
 
 void ARedVsBlueCharacter::Client_HitConfirmed_Implementation()
@@ -595,7 +727,7 @@ void ARedVsBlueCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME(ARedVsBlueCharacter, CarriedFlag);
 	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, CurrentAmmo, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, ReserveAmmo, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, bIsReloading, COND_OwnerOnly);
+	DOREPLIFETIME(ARedVsBlueCharacter, bIsReloading);
 }
 
 void ARedVsBlueCharacter::OnRep_ReserveAmmo()
@@ -605,6 +737,30 @@ void ARedVsBlueCharacter::OnRep_ReserveAmmo()
 
 void ARedVsBlueCharacter::OnRep_IsReloading()
 {
+
+	if (bIsReloading)
+	{
+		if (IsValid(ReloadMontage))
+		{
+			const float MontageLength = ReloadMontage->GetPlayLength();
+
+			const float PlayRate = MontageLength / FMath::Max(0.1f, ReloadDuration);
+
+			PlayCombatMontage(ReloadMontage, PlayRate);
+		}
+
+		else
+		{
+			if (IsValid(GetMesh()))
+			{
+				UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+				if (IsValid(AnimInstance) && IsValid(ReloadMontage) && AnimInstance->Montage_IsPlaying(ReloadMontage))
+				{
+					AnimInstance->Montage_Stop(0.15f, ReloadMontage);
+				}
+			}
+		}
+	}
 	UE_LOG(LogTemp, Log, TEXT("RELOADING: %s"), bIsReloading ? TEXT("YES") : TEXT("NO"));
 }
 
@@ -640,4 +796,10 @@ void ARedVsBlueCharacter::OnRep_CarriedFlag()
 	}
 
 	FlagMesh->SetVisibility(true);
+}
+
+void ARedVsBlueCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_AttachmentReplication();
+	BindTeamMaterial();
 }

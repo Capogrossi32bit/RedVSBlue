@@ -425,10 +425,9 @@ void ARedVsBlueGameModeBase::HandlePlayerDeath(ARedVsBlueCharacter* DeadCharacte
 	{
 		return;
 	}
+	APlayerController* VictimController = Cast<APlayerController>(DeadCharacter->GetController());
 
-	APlayerController* PC = Cast<APlayerController>(DeadCharacter->GetController());
-
-	if (!IsValid(PC))
+	if (!IsValid(VictimController))
 	{
 		return;
 	}
@@ -440,16 +439,48 @@ void ARedVsBlueGameModeBase::HandlePlayerDeath(ARedVsBlueCharacter* DeadCharacte
 		return;
 	}
 
-	//Guardamos referencia al controller
-	TWeakObjectPtr<APlayerController> WeakPC = PC;
+	ARedVsBluePlayerState* VictimPlayerState = VictimController->GetPlayerState<ARedVsBluePlayerState>();
 
-	//Desvinculamos la posesion del controller y el pawn
-	PC->UnPossess();
+	UHealthComponent* HealthComponent = DeadCharacter->FindComponentByClass<UHealthComponent>();
 
-	//Eliminamos el actor
-	DeadCharacter->Destroy();
+	AController* KillerController = nullptr;
+
+	if (IsValid(HealthComponent))
+	{
+		KillerController = HealthComponent->GetKillingController();
+	}
+
+	ARedVsBluePlayerState* KillerPlayerState = nullptr;
+	
+	if (IsValid(KillerController))
+	{
+		KillerPlayerState = KillerController->GetPlayerState<ARedVsBluePlayerState>();
+	}
+
+	if (IsValid(VictimPlayerState))
+	{
+		VictimPlayerState->AddDeath();
+	}
+
+	if (IsValid(KillerPlayerState) && KillerPlayerState != VictimPlayerState)
+	{
+		KillerPlayerState->AddKill();
+	}
 
 	//Si no estamos en fase de juego no hacemos nada
+	if (RBGameState->GetMatchPhase() != EMatchPhase::Playing)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("ELIMINATION | Killer: %s | Victim: %s"), *GetNameSafe(KillerPlayerState), *GetNameSafe(VictimPlayerState));
+
+	TWeakObjectPtr<APlayerController> WeakPC = VictimController;
+
+	VictimController->UnPossess();
+
+	DeadCharacter->Destroy();
+
 	if (RBGameState->GetMatchPhase() != EMatchPhase::Playing)
 	{
 		return;

@@ -10,11 +10,14 @@
 #include "RedVsBlueCharacter.generated.h"
 
 class UHealthComponent;
+class ARedVsBluePlayerState;
+class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class UAnimMontage;
 class AFlag;
 struct FInputActionValue;
 
@@ -76,10 +79,41 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* DropFlagAction;
 
+
+	//Team related protected values
+protected:
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> TeamMaterialInstance;
+
+	UPROPERTY(EditDefaultsOnly,Category = "Team")
+	int32 TeamMaterialIndex = 0;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Team")
+	FLinearColor BlueTeamColor = FLinearColor(0.05f, 0.2f, 1.f, 1.f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Team")
+	FLinearColor RedTeamColor = FLinearColor(1.f, 0.05f, 0.05f, 1.f);
+
+	UFUNCTION()
+	void UpdateTeamMaterial();
+
+	UFUNCTION()
+	void BindTeamMaterial();
+
+	virtual void OnRep_PlayerState() override;
+
+	UFUNCTION()
+	virtual void PossessedBy(AController* NewController) override;
+
+
 protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedFlag,EditAnywhere,BlueprintReadWrite, Category = "Flag")
 	TObjectPtr<AFlag> CarriedFlag = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	TObjectPtr<UStaticMeshComponent> WeaponMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Flag")
 	UStaticMeshComponent* FlagMesh;
@@ -122,6 +156,15 @@ protected:
 	UPROPERTY()
 	FTimerHandle ReloadTimerHandle;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UAnimMontage> FireMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UAnimMontage> ReloadMontage;
+
+	UFUNCTION()
+	void PlayCombatMontage(UAnimMontage* Montage, float PlayRate = 1.f);
+
 	UFUNCTION()
 	void FinishReload();
 
@@ -161,7 +204,7 @@ protected:
 	UFUNCTION()
 	void OnRep_CurrentAmmo();
 
-// Input related protected functions
+	// Input related protected functions
 protected:
 
 	/** Called for movement input */
@@ -198,6 +241,10 @@ public:
 
 	// Combat related public functions
 public:
+
+	UFUNCTION(BlueprintPure, Category = "Weapon")
+	float GetAimPitch() const;
+
 	UFUNCTION()
 	void Fire();
 
@@ -252,8 +299,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Team")
 	ETeam GetTeam() const;
-
-
 
 	void InteractOtherActor();
 

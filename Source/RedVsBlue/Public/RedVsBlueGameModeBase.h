@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "TeamTypes.h"
 #include "TimerManager.h"
+#include "HealthComponent.h"
 #include "GameFramework/GameModeBase.h"
 #include "RedVsBlueGameModeBase.generated.h"
 

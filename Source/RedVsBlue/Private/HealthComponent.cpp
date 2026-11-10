@@ -1,5 +1,6 @@
 #include "HealthComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/Actor.h"
 
 // Sets default values for this component's properties
@@ -38,6 +39,11 @@ void UHealthComponent::BeginPlay()
 void UHealthComponent::OnRep_CurrentHealth()
 {
 	OnHealthChanged.Broadcast(CurrentHealth, MaxHealth);
+}
+
+AController* UHealthComponent::GetKillingController() const
+{
+	return KillingController.Get();
 }
 
 float UHealthComponent::GetHealth() const
@@ -86,6 +92,12 @@ void UHealthComponent::HandleTakeAnyDamage(AActor* DamagedActor, float Damage, c
 	{
 		return;
 	}
+
+	if (Damage >= CurrentHealth)
+	{
+		KillingController = InstigatedBy;
+	}
+
 	SetHealth(CurrentHealth - Damage);
 
 }
