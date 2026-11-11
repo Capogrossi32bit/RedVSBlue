@@ -2,6 +2,8 @@
 
 
 #include "RedVsBlueGameState.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Net/UnrealNetwork.h"
 
 void ARedVsBlueGameState::AddScore(ETeam ScoringTeam)
@@ -25,9 +27,26 @@ void ARedVsBlueGameState::AddScore(ETeam ScoringTeam)
 		return;
 	}
 	ForceNetUpdate();
+	Multicast_PlayCaptureSound();
 }
 
 //Getter
+
+void ARedVsBlueGameState::Multicast_PlayCaptureSound_Implementation()
+{
+	if (IsValid(CaptureSound) && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySound2D(this, CaptureSound);
+	}
+}
+
+void ARedVsBlueGameState::Multicast_PlayDeathSound_Implementation(FVector DeathLocation)
+{
+	if (IsValid(DeathSound) && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, DeathLocation);
+	}
+}
 
 int32 ARedVsBlueGameState::GetBlueScore() const
 {

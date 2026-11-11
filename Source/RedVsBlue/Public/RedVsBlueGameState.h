@@ -6,6 +6,8 @@
 #include "MatchPhase.h"
 #include "RedVsBlueGameState.generated.h"
 
+class USoundBase;
+
 UCLASS()
 class REDVSBLUE_API ARedVsBlueGameState : public AGameStateBase
 {
@@ -27,6 +29,18 @@ public:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Winner, BlueprintReadOnly, Category = "Match")
 	ETeam Winner = ETeam::None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Match")
+	TObjectPtr<USoundBase> CaptureSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Match")
+	TObjectPtr<USoundBase> DeathSound;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_PlayCaptureSound();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_PlayDeathSound(FVector DeathLocation);
 
 	//Getters
 

@@ -26,6 +26,7 @@
 #include "RedVsBlueGameState.h"
 #include "../Public/RedVsBlueGameModeBase.h"
 #include "RedVsBluePlayerState.h"
+#include "Sound/SoundBase.h"
 
 ARedVsBlueCharacter::ARedVsBlueCharacter()
 {
@@ -554,6 +555,10 @@ void ARedVsBlueCharacter::Multicast_FireEffects_Implementation(FVector TraceStar
 	{
 		DrawDebugSphere(GetWorld(), TraceEnd, 12.f, 8, FColor::Red, false, 0.3f);
 	}
+	if (IsValid(FireSound) && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, FireSound, TraceStart);
+	}
 }
 
 void ARedVsBlueCharacter::Server_Fire_Implementation()
@@ -672,6 +677,10 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 
 void ARedVsBlueCharacter::Client_HitConfirmed_Implementation()
 {
+	if (IsValid(HitConfirmedSound))
+	{
+		UGameplayStatics::PlaySound2D(this, HitConfirmedSound);
+	}
 	UE_LOG(LogTemp, Warning, TEXT("Hit Confirmed!"));
 }
 
@@ -746,6 +755,11 @@ void ARedVsBlueCharacter::OnRep_IsReloading()
 
 			const float PlayRate = MontageLength / FMath::Max(0.1f, ReloadDuration);
 
+			if (IsValid(ReloadSound) && GetNetMode() != NM_DedicatedServer)
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, ReloadSound, GetActorLocation());
+			}
+
 			PlayCombatMontage(ReloadMontage, PlayRate);
 		}
 
@@ -760,6 +774,7 @@ void ARedVsBlueCharacter::OnRep_IsReloading()
 				}
 			}
 		}
+
 	}
 	UE_LOG(LogTemp, Log, TEXT("RELOADING: %s"), bIsReloading ? TEXT("YES") : TEXT("NO"));
 }

@@ -19,6 +19,7 @@ class UInputAction;
 class UInputMappingContext;
 class UAnimMontage;
 class AFlag;
+class USoundBase;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -162,6 +163,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UAnimMontage> ReloadMontage;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<USoundBase> FireSound;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<USoundBase> ReloadSound;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<USoundBase> HitConfirmedSound;
 	UFUNCTION()
 	void PlayCombatMontage(UAnimMontage* Montage, float PlayRate = 1.f);
 

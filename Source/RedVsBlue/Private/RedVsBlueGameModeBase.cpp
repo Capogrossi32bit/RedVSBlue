@@ -473,6 +473,8 @@ void ARedVsBlueGameModeBase::HandlePlayerDeath(ARedVsBlueCharacter* DeadCharacte
 		return;
 	}
 
+	RBGameState->Multicast_PlayDeathSound(DeadCharacter->GetActorLocation());
+
 	UE_LOG(LogTemp, Warning, TEXT("ELIMINATION | Killer: %s | Victim: %s"), *GetNameSafe(KillerPlayerState), *GetNameSafe(VictimPlayerState));
 
 	TWeakObjectPtr<APlayerController> WeakPC = VictimController;
