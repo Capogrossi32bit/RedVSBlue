@@ -59,6 +59,10 @@ bool UMenu::Initialize()
 	{
 		BotonUnirse->OnClicked.AddDynamic(this, &ThisClass::BotonUnirseClickeado);
 	}
+	if (BotonVolver)
+	{
+		BotonVolver->OnClicked.AddDynamic(this, &ThisClass::BotonVolverClickeado);
+	}
 	return true;
 }
 
@@ -234,6 +238,11 @@ void UMenu::BotonUnirseClickeado()
 	{
 		SubsistemaSesiones->BuscarSesiones(10000);
 	}
+}
+
+void UMenu::BotonVolverClickeado()
+{
+	OnOnlineBackRequested.Broadcast();
 }
 
 void UMenu::DesmontarMenu()

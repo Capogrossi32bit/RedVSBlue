@@ -21,7 +21,9 @@ public class RedVsBlue : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] {
+			"MultiplayerSessionOW"
+		});
 
 		PublicIncludePaths.AddRange(new string[] {
 			"RedVsBlue",

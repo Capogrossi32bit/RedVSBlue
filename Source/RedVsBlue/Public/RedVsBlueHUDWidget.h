@@ -3,11 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/Button.h"
 #include "Blueprint/UserWidget.h"
 #include "RedVsBlueHUDWidget.generated.h"
 
 class UTextBlock;
 class UProgressBar;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnReturnToMenuRequested);
 
 UCLASS()
 class REDVSBLUE_API URedVsBlueHUDWidget : public UUserWidget
@@ -21,6 +24,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	void RefreshCombatHUD();
+
+	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "HUD")
+	FOnReturnToMenuRequested OnReturnToMenuRequested;
+
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	void RequestReturnMenu();
 
 protected:
 
@@ -59,4 +68,7 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> DeathsText;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Button_BackToMenu;
 };

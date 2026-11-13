@@ -44,13 +44,27 @@ protected:
 	/** Pointer to the mobile controls widget */
 	TObjectPtr<UUserWidget> MobileControlsWidget;
 
+	UPROPERTY()
+	bool bReturningToMenu = false;
+
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
 
 	UFUNCTION()
 	void RefreshHUD();
 
+	UFUNCTION()
+	void HandleReturnToMenu();
+
+	UFUNCTION()
+	void HandleSessionDestroyed(bool bWasSuccesful);
+
+	void TravelToMainMenu();
+
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;
+
+private:
+	bool bFinishedInputConfigured = false;
 
 };

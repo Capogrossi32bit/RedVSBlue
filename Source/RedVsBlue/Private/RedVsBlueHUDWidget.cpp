@@ -116,10 +116,20 @@ void URedVsBlueHUDWidget::RefreshHUD()
 	if (CurrentPhase != EMatchPhase::Finished)
 	{
 		ResultText->SetVisibility(ESlateVisibility::Collapsed);
+		
+		if (IsValid(Button_BackToMenu))
+		{
+			Button_BackToMenu->SetVisibility(ESlateVisibility::Collapsed);
+		}
 		return;
 	}
 
 	ResultText->SetVisibility(ESlateVisibility::Visible);
+
+	if (IsValid(Button_BackToMenu))
+	{
+		Button_BackToMenu->SetVisibility(ESlateVisibility::Visible);
+	}
 
 	const ETeam Winner = RBGameState->GetWinner();
 
@@ -139,6 +149,7 @@ void URedVsBlueHUDWidget::RefreshHUD()
 	}
 
 	ResultText->SetText(FText::FromString(ResultString));
+
 }
 
 void URedVsBlueHUDWidget::RefreshCombatHUD()
@@ -214,4 +225,9 @@ void URedVsBlueHUDWidget::RefreshCombatHUD()
 			ReloadText->SetText(FText::FromString(TEXT("RECARGANDO...")));
 		}
 	}
+}
+
+void URedVsBlueHUDWidget::RequestReturnMenu()
+{
+	OnReturnToMenuRequested.Broadcast();
 }

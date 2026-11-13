@@ -7,6 +7,8 @@
 #include "Interfaces/OnlineSessionInterface.h"
 #include "Menu.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnOnlineBackRequested);
+
 UCLASS()
 class MULTIPLAYERSESSIONOW_API UMenu : public UUserWidget
 {
@@ -25,6 +27,9 @@ public:
 	// SUGERIDO: usar la clase concreta del widget de item de busqueda
 	UPROPERTY(EditAnywhere, Category = "Busqueda de sesiones")
 	TSubclassOf<class UWidgetSessionSerch> ClaseWidgetBusqueda;
+
+	UPROPERTY(BlueprintAssignable, Category = "Menu")
+	FOnOnlineBackRequested OnOnlineBackRequested;
 
 protected:
 	virtual bool Initialize() override;
@@ -47,6 +52,9 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	UButton* BotonUnirse;
 
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> BotonVolver;
+
 	UPROPERTY(meta = (BindWidget))
 	class UVerticalBox* CajaResultados;
 
@@ -58,6 +66,9 @@ private:
 
 	UFUNCTION()
 	void BotonUnirseClickeado();
+
+	UFUNCTION()
+	void BotonVolverClickeado();
 
 	void DesmontarMenu();
 
