@@ -139,13 +139,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	int32 MaxAmmo = 30;
 
-	UPROPERTY(ReplicatedUsing = OnRep_CurrentAmmo, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	int32 CurrentAmmo = 30;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	int32 MaxReserveAmmo = 90;
 
-	UPROPERTY(ReplicatedUsing = OnRep_ReserveAmmo, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	int32 ReserveAmmo = 90;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.1"))
@@ -205,13 +205,7 @@ protected:
 protected:
 
 	UFUNCTION()
-	void OnRep_ReserveAmmo();
-
-	UFUNCTION()
 	void OnRep_IsReloading();
-
-	UFUNCTION()
-	void OnRep_CurrentAmmo();
 
 	// Input related protected functions
 protected:

@@ -56,9 +56,6 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
 	virtual void Interact_Implementation(AActor* Interactor, const FString& InteractorTeam, bool InteractorHasFlag) override;
 
 

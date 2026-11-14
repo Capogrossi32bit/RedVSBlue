@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Flagstate.generated.h"
+#include "FlagState.generated.h"
 
 UENUM(BlueprintType)
 enum class EFlagState : uint8

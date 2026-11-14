@@ -11,14 +11,28 @@ void UMenuLan::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
-	Button_Hostear->OnClicked.AddDynamic(this, &UMenuLan::OnButtonHostearClicked);
-	Button_Unirse->OnClicked.AddDynamic(this, &UMenuLan::OnButtonUnirseClicked);
-	Button_Back->OnClicked.AddDynamic(this, &UMenuLan::OnButtonBackClicked);
+	if (IsValid(Button_Hostear))
+	{
+		Button_Hostear->OnClicked.AddDynamic(this, &UMenuLan::OnButtonHostearClicked);
+	}
 
-	FInputModeUIOnly InputMode;
+	if (IsValid(Button_Unirse))
+	{
+		Button_Unirse->OnClicked.AddDynamic(this, &UMenuLan::OnButtonUnirseClicked);
+	}
 
-	GetOwningPlayer()->SetInputMode(InputMode);
-	GetOwningPlayer()->SetShowMouseCursor(true);
+	if (IsValid(Button_Back))
+	{
+		Button_Back->OnClicked.AddDynamic(this, &UMenuLan::OnButtonBackClicked);
+	}
+
+	if (APlayerController* PC = GetOwningPlayer())
+	{
+		FInputModeUIOnly InputMode;
+
+		GetOwningPlayer()->SetInputMode(InputMode);
+		GetOwningPlayer()->SetShowMouseCursor(true);
+	}
 
 }
 

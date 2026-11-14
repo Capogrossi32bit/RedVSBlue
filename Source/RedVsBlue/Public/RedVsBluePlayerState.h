@@ -14,10 +14,10 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Team, BlueprintReadOnly, Category = "Team")
 	ETeam Team = ETeam::None;
 
-	UPROPERTY(ReplicatedUsing = OnRep_Kills, BlueprintReadOnly, Category = "Statistics")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Statistics")
 	int32 Kills = 0;
 
-	UPROPERTY(ReplicatedUsing = OnRep_Deaths, BlueprintReadOnly, Category = "Statistics")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Statistics")
 	int32 Deaths = 0;
 
 	UFUNCTION(BlueprintCallable,Category = "Team")
@@ -47,9 +47,4 @@ protected:
 	UFUNCTION()
 	void OnRep_Team();
 
-	UFUNCTION()
-	void OnRep_Kills();
-
-	UFUNCTION()
-	void OnRep_Deaths();
 };

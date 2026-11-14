@@ -44,7 +44,7 @@ private:
 	TObjectPtr<UButton> Button_Back;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UEditableTextBox> EditableTextBox_DireccionIP;;
+	TObjectPtr<UEditableTextBox> EditableTextBox_DireccionIP;
 
 	UPROPERTY(EditAnywhere)
 	TSoftObjectPtr<UWorld> Level;

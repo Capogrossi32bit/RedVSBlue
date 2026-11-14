@@ -17,11 +17,9 @@ void ARedVsBlueGameState::AddScore(ETeam ScoringTeam)
 	{
 	case ETeam::Blue:
 		BlueScore++;
-		OnRep_BlueScore();
 		break;
 	case ETeam::Red:
 		RedScore++;
-		OnRep_RedScore();
 		break;
 	default:
 		return;
@@ -83,7 +81,6 @@ void ARedVsBlueGameState::SetMatchPhase(EMatchPhase NewPhase)
 	}
 
 	MatchPhase = NewPhase;
-	OnRep_MatchPhase();
 	ForceNetUpdate();
 }
 
@@ -94,7 +91,7 @@ void ARedVsBlueGameState::SetRemainingTime(int32 NewTime)
 		return;
 	}
 	RemainingTime = FMath::Max(0, NewTime);
-	OnRep_RemainingTime();
+
 }
 
 void ARedVsBlueGameState::SetWinner(ETeam NewWinner)
@@ -105,34 +102,9 @@ void ARedVsBlueGameState::SetWinner(ETeam NewWinner)
 	}
 
 	Winner = NewWinner;
-	OnRep_Winner();
 	ForceNetUpdate();
 }
 
-void ARedVsBlueGameState::OnRep_BlueScore()
-{
-	UE_LOG(LogTemp, Warning, TEXT("Blue Score: %d"), BlueScore);
-}
-
-void ARedVsBlueGameState::OnRep_RedScore()
-{
-	UE_LOG(LogTemp, Warning, TEXT("Red Score: %d"), RedScore);
-}
-
-void ARedVsBlueGameState::OnRep_RemainingTime()
-{
-	UE_LOG(LogTemp, Log, TEXT("REMAINING TIME: %d"), RemainingTime);
-}
-
-void ARedVsBlueGameState::OnRep_MatchPhase()
-{
-	UE_LOG(LogTemp, Warning, TEXT("MATCH PHASE: %d"), static_cast<int32>(MatchPhase));
-}
-
-void ARedVsBlueGameState::OnRep_Winner()
-{
-	const FString WinnerText = Winner == ETeam::Blue ? TEXT("Blue") : Winner == ETeam::Red ? TEXT("Red") : TEXT("Draw");
-}
 
 void ARedVsBlueGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {

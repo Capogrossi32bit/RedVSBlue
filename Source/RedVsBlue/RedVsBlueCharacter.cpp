@@ -422,14 +422,9 @@ void ARedVsBlueCharacter::FinishReload()
 
 	bIsReloading = false;
 	GetWorldTimerManager().ClearTimer(ReloadTimerHandle);
-
-	OnRep_CurrentAmmo();
-	OnRep_ReserveAmmo();
 	OnRep_IsReloading();
 
 	ForceNetUpdate();
-
-	UE_LOG(LogTemp, Warning, TEXT("RELOAD COMPLETE | Ammo: %d | Reserve: %d"), CurrentAmmo, ReserveAmmo);
 }
 
 void ARedVsBlueCharacter::CancelReload()
@@ -605,7 +600,6 @@ void ARedVsBlueCharacter::Server_Fire_Implementation()
 	}
 	LastFireTime = CurrentTime;
 	CurrentAmmo--;
-	OnRep_CurrentAmmo();
 
 	AController* ShooterController = GetController();
 
@@ -681,7 +675,7 @@ void ARedVsBlueCharacter::Client_HitConfirmed_Implementation()
 	{
 		UGameplayStatics::PlaySound2D(this, HitConfirmedSound);
 	}
-	UE_LOG(LogTemp, Warning, TEXT("Hit Confirmed!"));
+
 }
 
 void ARedVsBlueCharacter::Server_Reload_Implementation()
@@ -724,7 +718,6 @@ void ARedVsBlueCharacter::Server_Reload_Implementation()
 
 	GetWorldTimerManager().SetTimer(ReloadTimerHandle, this, &ARedVsBlueCharacter::FinishReload, FMath::Max(0.1f, ReloadDuration), false);
 
-	UE_LOG(LogTemp, Warning, TEXT("RELOAD STARTED | Ammo: %d | Reserve: %d"), CurrentAmmo, ReserveAmmo);
 }
 
 //  ========================= REPLICATION =========================
@@ -737,11 +730,6 @@ void ARedVsBlueCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, CurrentAmmo, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ARedVsBlueCharacter, ReserveAmmo, COND_OwnerOnly);
 	DOREPLIFETIME(ARedVsBlueCharacter, bIsReloading);
-}
-
-void ARedVsBlueCharacter::OnRep_ReserveAmmo()
-{
-	UE_LOG(LogTemp, Log, TEXT("RESERVE AMMO: %d"), ReserveAmmo);
 }
 
 void ARedVsBlueCharacter::OnRep_IsReloading()
@@ -776,12 +764,6 @@ void ARedVsBlueCharacter::OnRep_IsReloading()
 		}
 
 	}
-	UE_LOG(LogTemp, Log, TEXT("RELOADING: %s"), bIsReloading ? TEXT("YES") : TEXT("NO"));
-}
-
-void ARedVsBlueCharacter::OnRep_CurrentAmmo()
-{
-	UE_LOG(LogTemp, Log, TEXT("Ammo: %d / %d"), CurrentAmmo, MaxAmmo);
 }
 
 void ARedVsBlueCharacter::OnRep_CarriedFlag()
@@ -815,6 +797,6 @@ void ARedVsBlueCharacter::OnRep_CarriedFlag()
 
 void ARedVsBlueCharacter::OnRep_PlayerState()
 {
-	Super::OnRep_AttachmentReplication();
+	Super::OnRep_PlayerState();
 	BindTeamMaterial();
 }

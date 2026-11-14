@@ -130,11 +130,4 @@ void UHealthComponent::SetHealth(float NewHealth)
 	Owner->ForceNetUpdate();
 }
 
-// Called every frame
-void UHealthComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	// ...
-}
 

@@ -47,7 +47,6 @@ void ARedVsBluePlayerController::BeginPlay()
 
 	if (!HUDWidgetClass)
 	{
-		UE_LOG(LogTemp, Error, TEXT("HUDWidgetClass is not assigned"));
 		return;
 	}
 
@@ -102,16 +101,9 @@ void ARedVsBluePlayerController::RefreshHUD()
 void ARedVsBluePlayerController::HandleReturnToMenu()
 {
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("RETURN: Blocked by guard"));
 
 	if (bReturningToMenu || !IsLocalController())
 	{
-		
-		UE_LOG(LogTemp, Warning,
-			TEXT("RETURN: Blocked by guard"));
-		
-		TravelToMainMenu();
 		return;
 	}
 
@@ -135,9 +127,6 @@ void ARedVsBluePlayerController::HandleReturnToMenu()
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("RETURN: Requesting DestroySession"));
-
 	SessionSubsystem->MultijugadorAlDestruirSesionCompletada.AddUniqueDynamic(this, &ARedVsBluePlayerController::HandleSessionDestroyed);
 	SessionSubsystem->DestruirSesion();
 
@@ -145,11 +134,6 @@ void ARedVsBluePlayerController::HandleReturnToMenu()
 
 void ARedVsBluePlayerController::HandleSessionDestroyed(bool bWasSuccesful)
 {
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("RETURN: Session destruction result = %s"),
-		bWasSuccesful ? TEXT("SUCCESS") : TEXT("FAILED"));
-
 
 	if (UGameInstance* GameInstance = GetGameInstance())
 	{
@@ -161,8 +145,6 @@ void ARedVsBluePlayerController::HandleSessionDestroyed(bool bWasSuccesful)
 
 	if (!bWasSuccesful)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Unable to destroy multiplayer session"));
-
 
 		bReturningToMenu = false;
 
@@ -178,11 +160,6 @@ void ARedVsBluePlayerController::HandleSessionDestroyed(bool bWasSuccesful)
 void ARedVsBluePlayerController::TravelToMainMenu()
 {
 	const FString MainMenuPath = TEXT("/Game/MainLevel");
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("RETURN: Traveling to %s | Authority: %s"),
-		*MainMenuPath,
-		HasAuthority() ? TEXT("YES") : TEXT("NO"));
 
 	if (HasAuthority())
 	{

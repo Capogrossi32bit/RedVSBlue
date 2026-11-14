@@ -15,19 +15,19 @@ class REDVSBLUE_API ARedVsBlueGameState : public AGameStateBase
 
 public:
 
-	UPROPERTY(ReplicatedUsing = OnRep_BlueScore, BlueprintReadOnly, Category = "Score")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Score")
 	int32 BlueScore = 0;
 
-	UPROPERTY(ReplicatedUsing = OnRep_RedScore, BlueprintReadOnly, Category = "Score")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Score")
 	int32 RedScore = 0;
 	
-	UPROPERTY(ReplicatedUsing = OnRep_RemainingTime, BlueprintReadOnly, Category = "Match")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Match")
 	int32 RemainingTime = 15;
 
-	UPROPERTY(ReplicatedUsing = OnRep_MatchPhase, BlueprintReadOnly,Category = "Match")
+	UPROPERTY(Replicated, BlueprintReadOnly,Category = "Match")
 	EMatchPhase MatchPhase = EMatchPhase::Waiting;
 
-	UPROPERTY(ReplicatedUsing = OnRep_Winner, BlueprintReadOnly, Category = "Match")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Match")
 	ETeam Winner = ETeam::None;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Match")
@@ -75,20 +75,4 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-protected:
-
-	UFUNCTION()
-	void OnRep_BlueScore();
-
-	UFUNCTION()
-	void OnRep_RedScore();
-
-	UFUNCTION()
-	void OnRep_RemainingTime();
-
-	UFUNCTION()
-	void OnRep_MatchPhase();
-
-	UFUNCTION()
-	void OnRep_Winner();
 };
